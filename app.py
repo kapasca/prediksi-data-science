@@ -492,8 +492,8 @@ if selected_item != fallback_all_label:
         <div style='font-size: 0.85rem; color: #E0E0E0; font-weight: 500;'>Prediction for {periode_label}</div>
         <div style='font-size: 1.5rem; font-weight: 700; color: #FFFFFF; margin: 1px 0;'>{predicted_value:,} Qty</div>
         <div style='font-size: 0.72rem; color: #B0B0B0;'>
-            <span style='color: #FFFFFF; font-weight: 600;'>[Model Evaluation]</span> 
-            [Accuracy Score] WMAPE: <span style='color: #00FFA6; font-weight: 600;'>{accuracy_score:.1f}%</span><br/>
+            <span style='color: #FFFFFF; font-weight: 600;'>[Accuracy Score]</span> 
+            WMAPE: <span style='color: #00FFA6; font-weight: 600;'>{accuracy_score:.1f}%</span><br/>
             MAE: <span style='color: #FFB300; font-weight: 600;'>&plusmn; {mae_val:.0f} qty</span> | 
             RMSE: <span style='color: #FF6B6B; font-weight: 600;'>&plusmn; {rmse_val:.0f} qty</span>
         </div>
