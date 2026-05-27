@@ -17,7 +17,8 @@ warnings.filterwarnings("ignore")
 # ==============================================================================
 # 01. APPLICATION CONFIGURATION & WEB METADATA
 # ==============================================================================
-st.set_page_config(layout="wide", page_title="E-Commerce Sales Predictions")
+# initial_sidebar_state="expanded" dipasang agar mencegah sidebar hilang total saat reload
+st.set_page_config(layout="wide", page_title="E-Commerce Sales Predictions", initial_sidebar_state="expanded")
 
 # ==============================================================================
 # 02. VISUAL UI ARCHITECTURE & CUSTOM CSS INJECTION
@@ -105,6 +106,7 @@ st.markdown("""
 @st.cache_data
 def load_raw_data():
     data = pd.read_csv("dataset.csv")
+    # Membersihkan baris yang kehilangan data kritikal untuk pemodelan
     data = data.dropna(subset=['Product Name', 'Order Date', 'Quantity'])
     data['Order Date'] = pd.to_datetime(data['Order Date'], errors='coerce')
     data = data.dropna(subset=['Order Date'])
@@ -118,10 +120,47 @@ except Exception as error:
 
 product_list = sorted(list(dataset_raw['Product Name'].unique()))
 
+# Inisialisasi session state untuk kontrol penampilan modal dataset
+if "show_dataset_modal" not in st.session_state:
+    st.session_state.show_dataset_modal = False
+
 # ==============================================================================
-# 04. USER INTERFACE CONTROLS (SIDEBAR PANEL)
+# 04. SUB-ROUTINE: DATASET MODAL VIEWER FUNCTION
+# ==============================================================================
+@st.dialog("RAW Dataset Preview", width="large")
+def show_dataset_preview_modal():
+    st.markdown("<h3 style='color: #edae3e; text-align: center; margin-top: -1.5rem;'>RAW Dataset Preview</h3>", unsafe_allow_html=True)
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Rows", len(dataset_raw))
+    with col2:
+        st.metric("Total Columns", len(dataset_raw.columns))
+    with col3:
+        st.metric("Products", len(product_list))
+    
+    st.markdown("")
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Column Names:</b></div>", unsafe_allow_html=True)
+    st.write(dataset_raw.columns.tolist())
+    
+    st.markdown("")
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.85rem; margin: 1rem 0;'><b>Summary Statistics:</b></div>", unsafe_allow_html=True)
+    st.dataframe(dataset_raw.describe(), use_container_width=True)
+    
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Data Preview (First 50 rows):</b></div>", unsafe_allow_html=True)
+    st.dataframe(dataset_raw.head(50), use_container_width=True, height=350)
+    
+    st.markdown("---")
+    # Tombol close di bawah sekarang cukup memicu st.rerun() untuk menutup dialog secara bersih
+    if st.button("Close Preview", key="btn_close_dataset", use_container_width=True):
+        st.rerun()
+
+# ==============================================================================
+# 05. USER INTERFACE CONTROLS (SIDEBAR PANEL)
 # ==============================================================================
 with st.sidebar:
+    # TOP SECTION: Control Panel Title
     st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 1.7rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Control Panel</h2>", unsafe_allow_html=True)
     
     st.markdown("<div class='sidebar-label'>Product Name Filter</div>", unsafe_allow_html=True)
@@ -130,7 +169,7 @@ with st.sidebar:
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     st.markdown("<div class='sidebar-label'>Forecasting Period</div>", unsafe_allow_html=True)
-    selected_period = st.selectbox("", ["Monthly", "Weekly"], index=0, label_visibility="collapsed", key="ctl_period")
+    selected_period = st.selectbox("", ["Monthly", "Quarterly", "Weekly"], index=0, label_visibility="collapsed", key="ctl_period")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     st.markdown("<div class='sidebar-label'>Machine Learning Algorithm</div>", unsafe_allow_html=True)
@@ -141,8 +180,29 @@ with st.sidebar:
     st.markdown("<div class='sidebar-label'>Show Data</div>", unsafe_allow_html=True)
     range_options = ["All Data", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%"]
     selected_range = st.selectbox("", range_options, index=0, label_visibility="collapsed", key="ctl_range")
+    
+    # SPACER: Memberikan jarak vertikal yang dinamis ke bawah
+    st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
+    for _ in range(5):
+        st.write()
+    
+    # BOTTOM SECTION: Dataset Viewer Button (Teks statis, lurus tanpa ribet state)
+    st.markdown("<hr style='margin: 1.5rem 0;'>", unsafe_allow_html=True)
+    
+    if st.button("View Dataset (Summary)", use_container_width=True, key="btn_view_dataset"):
+        show_dataset_preview_modal()
 
-freq_code = 'ME' if selected_period == "Monthly" else 'W'
+# Konversi String Frekuensi ke Format Datetime Pandas
+if selected_period == "Monthly":
+    freq_code = 'ME'
+elif selected_period == "Quarterly":
+    freq_code = 'QE'
+else:  # Weekly
+    freq_code = 'W'
+
+# Picu penampilan fungsi dialog modal jika status True
+if st.session_state.show_dataset_modal:
+    show_dataset_preview_modal()
 
 # Judul utama dipasang di area konten utama kanan
 st.title("E-Commerce Sales Predictions")
@@ -152,14 +212,15 @@ st.write("---")
 placeholder_chart = st.empty()
 
 # ==============================================================================
-# 05. DATA PIPELINE - PHASE 2: PROCESSING & MODEL FORECASTING
+# 06. DATA PIPELINE - PHASE 2: PROCESSING & MODEL FORECASTING (SINGLE PRODUCT)
 # ==============================================================================
 if selected_product != "All Products":
     # --------------------------------------------------------------------------
-    # SUB-PHASE A: TIME-SERIES RESAMPLING & RE-INDEXING (SINGLE PRODUCT)
+    # SUB-PHASE A: TIME-SERIES RESAMPLING & RE-INDEXING
     # --------------------------------------------------------------------------
     dataset_product = dataset_raw[dataset_raw['Product Name'] == selected_product]
     
+    # Membuat timeline penuh untuk menangani 'missing period' menggunakan reindex
     full_timeline = pd.date_range(start=dataset_product['Order Date'].min(), end=dataset_product['Order Date'].max(), freq=freq_code)
     df_interim = dataset_product.resample(freq_code, on='Order Date')['Quantity'].sum()
     dataset_resampled = df_interim.reindex(full_timeline, fill_value=0).to_frame()
@@ -167,12 +228,15 @@ if selected_product != "All Products":
     
     original_datetime_index = dataset_resampled.index.copy()
     
+    # Pemetaan string label sumbu X berdasarkan periode pilihan user
     if selected_period == "Weekly":
         chart_string_labels = dataset_resampled.index.map(lambda dt: f"{dt.strftime('%Y-%m')} (W-{dt.isocalendar()[1]})").tolist()
-    else:
+    elif selected_period == "Quarterly":
+        chart_string_labels = dataset_resampled.index.map(lambda dt: f"{dt.strftime('%Y')}-Q{(dt.month-1)//3 + 1}").tolist()
+    else:  # Monthly
         chart_string_labels = dataset_resampled.index.strftime('%Y-%m').tolist()
 
-    # Feature Engineering (Untuk Linear Regression & XGBoost)
+    # Feature Engineering (Untuk Linear Regression & XGBoost supervised learning)
     dataset_resampled['Timestep'] = np.arange(len(dataset_resampled))
     dataset_resampled['Month'] = dataset_resampled.index.month
     dataset_resampled['Year'] = dataset_resampled.index.year
@@ -186,6 +250,7 @@ if selected_product != "All Products":
     X_features = dataset_resampled[feature_cols].values
     y_target = dataset_resampled['Quantity'].values
     
+    # Pembagian Data: 80% Training Data dan 20% Testing Data untuk Model Evaluation
     split_index = int(len(dataset_resampled) * 0.8)
     if split_index == 0: split_index = 1
     
@@ -247,7 +312,12 @@ if selected_product != "All Products":
                 model_final.fit(X_features, y_target)
                 
                 last_date_parsed = original_datetime_index[-1]
-                future_date_obj = (last_date_parsed + pd.DateOffset(months=1)) if selected_period == "Monthly" else (last_date_parsed + pd.Timedelta(weeks=1))
+                if selected_period == "Monthly":
+                    future_date_obj = last_date_parsed + pd.DateOffset(months=1)
+                elif selected_period == "Quarterly":
+                    future_date_obj = last_date_parsed + pd.DateOffset(months=3)
+                else:  # Weekly
+                    future_date_obj = last_date_parsed + pd.Timedelta(weeks=1)
                 
                 X_future_step = np.array([[len(dataset_resampled), future_date_obj.month, future_date_obj.year, y_target[-1]]])
                 predicted_value = max(0, int(model_final.predict(X_future_step)[0]))
@@ -305,7 +375,12 @@ if selected_product != "All Products":
     # SUB-PHASE C: KPI METRICS & DATAFRAME RENDERING PACKING
     # --------------------------------------------------------------------------
     accuracy_score = max(0.0, 100.0 - mape_error)
-    periode_label = "Next Month" if selected_period == "Monthly" else "Next Week"
+    if selected_period == "Monthly":
+        periode_label = "Next Month"
+    elif selected_period == "Quarterly":
+        periode_label = "Next Quarter"
+    else:  # Weekly
+        periode_label = "Next Week"
     
     html_title_box = f"""
     <div style='text-align: left; line-height: 1.2;'>
@@ -331,7 +406,10 @@ if selected_product != "All Products":
     last_date_parsed = original_datetime_index[-1]
     if selected_period == "Monthly":
         future_date_string = (last_date_parsed + pd.DateOffset(months=1)).strftime('%Y-%m')
-    else:
+    elif selected_period == "Quarterly":
+        future_date = last_date_parsed + pd.DateOffset(months=3)
+        future_date_string = f"{future_date.strftime('%Y')}-Q{(future_date.month-1)//3 + 1}"
+    else:  # Weekly
         future_date = last_date_parsed + pd.Timedelta(weeks=1)
         future_date_string = f"{future_date.strftime('%Y-%m')} (W-{future_date.isocalendar()[1]})"
 
@@ -368,7 +446,7 @@ if selected_product != "All Products":
 
 else:
     # ==============================================================================
-    # 06. DATA PIPELINE - ALL PRODUCTS MODE (FALLBACK)
+    # 07. DATA PIPELINE - ALL PRODUCTS MODE (FALLBACK MULTI LINE)
     # ==============================================================================
     html_title_box = """
     <div style='text-align: left; line-height: 1.2;'>
@@ -382,7 +460,9 @@ else:
     global_timeline = dataset_raw.resample(freq_code, on='Order Date')['Quantity'].sum().index
     if selected_period == "Weekly":
         fallback_labels = global_timeline.map(lambda dt: f"{dt.strftime('%Y-%m')} (W-{dt.isocalendar()[1]})").tolist()
-    else:
+    elif selected_period == "Quarterly":
+        fallback_labels = global_timeline.map(lambda dt: f"{dt.strftime('%Y')}-Q{(dt.month-1)//3 + 1}").tolist()
+    else:  # Monthly
         fallback_labels = global_timeline.strftime('%Y-%m').tolist()
         
     df_all_render = pd.DataFrame(index=fallback_labels)
@@ -413,7 +493,7 @@ else:
     html_custom_legend += "</div>"
 
 # ==============================================================================
-# 07. DYNAMIC PLACEHOLDER INJECTION & ENGINE GRAPHICS RENDERING
+# 08. DYNAMIC PLACEHOLDER INJECTION & ENGINE GRAPHICS RENDERING
 # ==============================================================================
 with placeholder_chart.container():
     col_title, col_info = st.columns([1, 1])
