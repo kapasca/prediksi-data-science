@@ -68,7 +68,7 @@ st.markdown("""
         
         /* Mengurangi jarak antar blok komponen di sidebar */
         [data-testid="stSidebarUserContent"] .stElementContainer {
-            margin-bottom: -10px !important; /* Nilai minus bikin makin rapat */
+            margin-bottom: -10px !important;
         }
         
         /* Mengurangi padding vertikal bawaan widget selectbox */
@@ -145,7 +145,7 @@ def load_raw_data():
 try:
     dataset_raw = load_raw_data()
 except Exception as error:
-    st.error(f"Failed to load raw data: {error}")
+    st.error(f"Failed to read dataset file: {error}")
     st.stop()
 
 # Mengekstraksi daftar unik dari dataset untuk mengisi opsi pada komponen dropdown antarmuka pengguna
@@ -175,11 +175,11 @@ def show_dataset_preview_modal():
         st.metric("Unique Products", len(product_list))
     
     st.markdown("")
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Columns:</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Column Names:</b></div>", unsafe_allow_html=True)
     st.write(dataset_raw.columns.tolist())
     
     st.markdown("")
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.85rem; margin: 1rem 0;'><b>Descriptive Statistics</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.85rem; margin: 1rem 0;'><b>Descriptive Statistics Summary:</b></div>", unsafe_allow_html=True)
     st.dataframe(dataset_raw.describe(), use_container_width=True)
     
     st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Data Preview (First 50 Rows):</b></div>", unsafe_allow_html=True)
@@ -201,7 +201,7 @@ with st.sidebar:
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 2: Filter Nama Item secara Adaptif mengikuti Basis Prediksi yang dipilih
-    st.markdown("<div class='sidebar-label'>Item Name Filter</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-label'>Item Filter</div>", unsafe_allow_html=True)
     if prediction_basis == "By Product":
         item_options = ["All Products"] + product_list
         target_column = 'Product Name'
@@ -232,7 +232,7 @@ with st.sidebar:
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 6: Batasan Rentang Data Historis yang Ditampilkan pada Sumbu Grafik X
-    st.markdown("<div class='sidebar-label'>Data Range Displayed</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-label'>Displayed Data Range</div>", unsafe_allow_html=True)
     range_options = ["All Data", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%"]
     selected_range = st.selectbox("", range_options, index=0, label_visibility="collapsed", key="ctl_range")
     
@@ -489,7 +489,7 @@ if selected_item != fallback_all_label:
     # Membuat blok informasi HTML dinamis untuk diletakkan pada header visual bagian kanan (Berisi Nilai Prediksi & Skor Akurasi)
     html_info_box = f"""
     <div style='text-align: right; line-height: 1.3;'>
-        <div style='font-size: 0.85rem; color: #E0E0E0; font-weight: 500;'>Prediction for {periode_label}</div>
+        <div style='font-size: 0.85rem; color: #E0E0E0; font-weight: 500;'>Forecast for {periode_label}</div>
         <div style='font-size: 1.5rem; font-weight: 700; color: #FFFFFF; margin: 1px 0;'>{predicted_value:,} Qty</div>
         <div style='font-size: 0.72rem; color: #B0B0B0;'>
             <span style='color: #FFFFFF; font-weight: 600;'>[Accuracy Score]</span> 
@@ -561,13 +561,13 @@ else:
     <div style='text-align: left; line-height: 1.2;'>
         <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics (Scope: {selected_region})</div>
         <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>{selected_item}</div>
-        <div style='font-size: 0.75rem; color: #B0B0B0;'>Source: <span style='color: #00FFA6; font-weight: 600;'>dataset.csv</span></div>
+        <div style='font-size: 0.75rem; color: #B0B0B0;'>Data Source: <span style='color: #00FFA6; font-weight: 600;'>dataset.csv</span></div>
     </div>
     """
     html_info_box = "" # Mengosongkan boks info metrik akurasi karena tidak ada pemodelan yang dieksekusi
     
     if len(dataset_working) == 0:
-        st.warning(f"No historical transaction data found for Region: {selected_region}")
+        st.warning(f"No historical transaction data available for this region selection: {selected_region}")
         st.stop()
         
     # Mengompilasi linimasa global komparatif
@@ -644,8 +644,22 @@ with placeholder_chart.container():
             "point": {"size": 60, "filled": True, "cursor": "pointer"} # Mempertegas visualisasi simpul koordinat berupa lingkaran
         },
         "encoding": {
-            "x": {"field": "Date", "type": "nominal", "sort": None, "axis": {"labelAngle": -90, "title": None}},
-            "y": {"field": "Amount", "type": "quantitative", "axis": {"title": "Volume Transaksi (Qty)"}},
+            "x": {
+                "field": "Date",
+                "type": "nominal",
+                "sort": None,
+                "axis": {
+                    "labelAngle": -90,
+                    "title": None
+                }
+            },
+            "y": {
+                "field": "Amount",
+                "type": "quantitative",
+                "axis": {
+                    "title": "Transaction Volume (Qty)"
+                }
+            },
             "color": color_schema
         },
         "config": {
