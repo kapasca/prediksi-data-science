@@ -25,41 +25,51 @@ st.set_page_config(layout="wide", page_title="E-Commerce Sales Predictions")
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
-        header {visibility: hidden;}
         footer {visibility: hidden;}
-        div[data-testid="stToolbar"] {visibility: hidden;}
         
+        /* Pengaturan kontainer utama: responsif tanpa mematikan scrollbar sistem */
         .block-container {
-            padding-top: 1rem !important;
-            padding-bottom: 0rem !important;
-            max-height: 100vh;
-            overflow: hidden;
+            padding-top: 1.5rem !important;
+            padding-bottom: 2rem !important;
+            overflow-y: auto !important;
         }
         
         h1 {
             margin-bottom: 0.1rem !important;
-            font-size: 1.6rem !important;
+            font-size: 1.8rem !important;
             color: #edae3e !important;
             text-align: center !important;
             width: 100%;
         }
+        
         hr {
-            margin-top: 0.3rem !important;
-            margin-bottom: 0.3rem !important;
+            margin-top: 0.4rem !important;
+            margin-bottom: 1rem !important;
         }
         
         .stVegaLiteChart {
-            height: 48vh !important;
-            margin-top: 0.2rem !important;
+            height: 52vh !important;
+            margin-top: 0.5rem !important;
+        }
+        
+        .stAppDeployButton {
+            display: none !important;
         }
         
         div[data-testid="stHorizontalBlock"] {
             margin-top: 0.2rem !important;
         }
         
-        div[data-testid="stSelectbox"] label p {
-            font-size: 0.75rem !important;
+        [data-testid="stHeaderActionElements"] {
+            display: none;
+        }
+        
+        /* Styling khusus teks label di dalam sidebar */
+        .sidebar-label {
+            font-size: 0.8rem !important;
             color: #B0B0B0 !important;
+            margin-bottom: 0.2rem;
+            font-weight: 500;
         }
         
         .custom-legend-container {
@@ -67,10 +77,11 @@ st.markdown("""
             justify-content: center;
             align-items: center;
             gap: 25px;
-            margin-top: 25px !important;
-            margin-bottom: 15px !important;
+            margin-top: 20px !important;
+            margin-bottom: 10px !important;
             width: 100%;
         }
+        
         .legend-item {
             display: flex;
             align-items: center;
@@ -78,6 +89,7 @@ st.markdown("""
             color: #E0E0E0;
             font-weight: 400;
         }
+        
         .legend-color-box {
             width: 14px;
             height: 4px;
@@ -86,9 +98,6 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
-
-st.title("E-Commerce Sales Predictions")
-st.write("---")
 
 # ==============================================================================
 # 03. DATA PIPELINE - PHASE 1: INGESTION & DATA CLEANING
@@ -109,36 +118,38 @@ except Exception as error:
 
 product_list = sorted(list(dataset_raw['Product Name'].unique()))
 
-placeholder_chart = st.empty()
-st.write("---")
-placeholder_controls = st.container()
-
 # ==============================================================================
-# 04. USER INTERFACE CONTROLS (BOTTOM CONTROLLER PANEL)
+# 04. USER INTERFACE CONTROLS (SIDEBAR PANEL)
 # ==============================================================================
-with placeholder_controls:
-    col_product, col_period, col_method, col_range = st.columns(4)
+with st.sidebar:
+    st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 1.7rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Dashboard Controls</h2>", unsafe_allow_html=True)
     
-    with col_product:
-        st.markdown("<div style='font-size: 0.75rem; color: #B0B0B0; margin-bottom: 0.2rem;'>Product Name Filter</div>", unsafe_allow_html=True)
-        product_options = ["All Products"] + product_list
-        selected_product = st.selectbox("", product_options, index=0, label_visibility="collapsed")
-        
-    with col_period:
-        st.markdown("<div style='font-size: 0.75rem; color: #B0B0B0; margin-bottom: 0.2rem;'>Forecasting Period</div>", unsafe_allow_html=True)
-        selected_period = st.selectbox("", ["Monthly", "Weekly"], index=0, label_visibility="collapsed")
-        
-    with col_method:
-        st.markdown("<div style='font-size: 0.75rem; color: #B0B0B0; margin-bottom: 0.2rem;'>Machine Learning Algorithm</div>", unsafe_allow_html=True)
-        algorithm_options = ["Linear Regression", "Moving Average", "XGBoost", "Exponential Smoothing", "Prophet"]
-        selected_method = st.selectbox("", algorithm_options, index=0, label_visibility="collapsed")
-        
-    with col_range:
-        st.markdown("<div style='font-size: 0.75rem; color: #B0B0B0; margin-bottom: 0.2rem;'>Show Data</div>", unsafe_allow_html=True)
-        range_options = ["All Data", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%"]
-        selected_range = st.selectbox("", range_options, index=0, label_visibility="collapsed")
+    st.markdown("<div class='sidebar-label'>Product Name Filter</div>", unsafe_allow_html=True)
+    product_options = ["All Products"] + product_list
+    selected_product = st.selectbox("", product_options, index=0, label_visibility="collapsed", key="ctl_product")
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    
+    st.markdown("<div class='sidebar-label'>Forecasting Period</div>", unsafe_allow_html=True)
+    selected_period = st.selectbox("", ["Monthly", "Weekly"], index=0, label_visibility="collapsed", key="ctl_period")
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    
+    st.markdown("<div class='sidebar-label'>Machine Learning Algorithm</div>", unsafe_allow_html=True)
+    algorithm_options = ["Linear Regression", "Moving Average", "XGBoost", "Exponential Smoothing", "Prophet"]
+    selected_method = st.selectbox("", algorithm_options, index=0, label_visibility="collapsed", key="ctl_method")
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    
+    st.markdown("<div class='sidebar-label'>Show Data</div>", unsafe_allow_html=True)
+    range_options = ["All Data", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%"]
+    selected_range = st.selectbox("", range_options, index=0, label_visibility="collapsed", key="ctl_range")
 
 freq_code = 'ME' if selected_period == "Monthly" else 'W'
+
+# Judul utama dipasang di area konten utama kanan
+st.title("E-Commerce Sales Predictions")
+st.write("---")
+
+# Placeholder untuk rendering grafik
+placeholder_chart = st.empty()
 
 # ==============================================================================
 # 05. DATA PIPELINE - PHASE 2: PROCESSING & MODEL FORECASTING
@@ -304,7 +315,6 @@ if selected_product != "All Products":
     </div>
     """
     
-    # Update UI: Menggunakan simbol ± untuk MAE dan RMSE
     html_info_box = f"""
     <div style='text-align: right; line-height: 1.3;'>
         <div style='font-size: 0.85rem; color: #E0E0E0; font-weight: 500;'>{periode_label} Prediction</div>
@@ -313,7 +323,7 @@ if selected_product != "All Products":
             <span style='color: #FFFFFF; font-weight: 600;'>[Accuracy Score]</span> 
             WMAPE: <span style='color: #00FFA6; font-weight: 600;'>{accuracy_score:.1f}%</span><br/>
             MAE: <span style='color: #FFB300; font-weight: 600;'>&plusmn; {mae_val:.0f} qty</span> | 
-            RMSE: <span style='color: #FFB300; font-weight: 600;'>&plusmn; {rmse_val:.0f} qty</span>
+            RMSE: <span style='color: #FF6B6B; font-weight: 600;'>&plusmn; {rmse_val:.0f} qty</span>
         </div>
     </div>
     """
@@ -420,7 +430,6 @@ with placeholder_chart.container():
     vega_lite_spec = {
         "width": "container",
         "height": "container",
-        # MODIFIKASI DI SINI: Mengaktifkan titik (point) dengan ukuran lebih besar (size: 60)
         "mark": {
             "type": "line", 
             "tooltip": True, 
