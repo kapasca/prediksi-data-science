@@ -145,7 +145,7 @@ def load_raw_data():
 try:
     dataset_raw = load_raw_data()
 except Exception as error:
-    st.error(f"Gagal membaca berkas dataset: {error}")
+    st.error(f"Failed to load raw data: {error}")
     st.stop()
 
 # Mengekstraksi daftar unik dari dataset untuk mengisi opsi pada komponen dropdown antarmuka pengguna
@@ -168,25 +168,25 @@ def show_dataset_preview_modal():
     # Menampilkan metrik utama volume data menggunakan tata letak tiga kolom
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Total Baris", len(dataset_raw))
+        st.metric("Total Rows", len(dataset_raw))
     with col2:
-        st.metric("Total Kolom", len(dataset_raw.columns))
+        st.metric("Total Columns", len(dataset_raw.columns))
     with col3:
-        st.metric("Jumlah Produk Unik", len(product_list))
+        st.metric("Unique Products", len(product_list))
     
     st.markdown("")
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Nama-Nama Kolom:</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Columns:</b></div>", unsafe_allow_html=True)
     st.write(dataset_raw.columns.tolist())
     
     st.markdown("")
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.85rem; margin: 1rem 0;'><b>Ringkasan Statistik Deskriptif:</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.85rem; margin: 1rem 0;'><b>Descriptive Statistics</b></div>", unsafe_allow_html=True)
     st.dataframe(dataset_raw.describe(), use_container_width=True)
     
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Pratinjau Data (50 Baris Pertama):</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Data Preview (First 50 Rows):</b></div>", unsafe_allow_html=True)
     st.dataframe(dataset_raw.head(50), use_container_width=True, height=350)
     
     st.markdown("---")
-    if st.button("Tutup Pratinjau", key="btn_close_dataset", use_container_width=True):
+    if st.button("Close Preview", key="btn_close_dataset", use_container_width=True):
         st.rerun()
 
 # ==============================================================================
@@ -196,12 +196,12 @@ with st.sidebar:
     st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 2.5rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Control Panel</h2>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 1: Basis Prediksi (Berdasarkan Produk Spesifik atau Kategori Global)
-    st.markdown("<div class='sidebar-label'>Basis Prediksi</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-label'>Prediction Basis</div>", unsafe_allow_html=True)
     prediction_basis = st.selectbox("", ["By Product", "By Category"], index=0, label_visibility="collapsed", key="ctl_basis")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 2: Filter Nama Item secara Adaptif mengikuti Basis Prediksi yang dipilih
-    st.markdown("<div class='sidebar-label'>Filter Nama Item</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-label'>Item Name Filter</div>", unsafe_allow_html=True)
     if prediction_basis == "By Product":
         item_options = ["All Products"] + product_list
         target_column = 'Product Name'
@@ -215,33 +215,33 @@ with st.sidebar:
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 3: Wilayah Kerja (Region)
-    st.markdown("<div class='sidebar-label'>Filter Wilayah (Region)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-label'>Region Filter</div>", unsafe_allow_html=True)
     region_options = ["All Regions"] + region_list
     selected_region = st.selectbox("", region_options, index=0, label_visibility="collapsed", key="ctl_region")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 4: Granularitas Waktu atau Interval Agregasi Data Deret Waktu
-    st.markdown("<div class='sidebar-label'>Periode Peramalan (Forecasting Period)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-label'>Forecasting Period</div>", unsafe_allow_html=True)
     selected_period = st.selectbox("", ["Monthly", "Quarterly", "Weekly"], index=0, label_visibility="collapsed", key="ctl_period")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 5: Penentuan Algoritma Matematika / Machine Learning yang akan digunakan
-    st.markdown("<div class='sidebar-label'>Algoritma Machine Learning</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-label'>Machine Learning Algorithm</div>", unsafe_allow_html=True)
     algorithm_options = ["Linear Regression", "Moving Average", "XGBoost", "Exponential Smoothing", "Prophet"]
     selected_method = st.selectbox("", algorithm_options, index=0, label_visibility="collapsed", key="ctl_method")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 6: Batasan Rentang Data Historis yang Ditampilkan pada Sumbu Grafik X
-    st.markdown("<div class='sidebar-label'>Rentang Data yang Ditampilkan</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-label'>Data Range Displayed</div>", unsafe_allow_html=True)
     range_options = ["All Data", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%"]
     selected_range = st.selectbox("", range_options, index=0, label_visibility="collapsed", key="ctl_range")
     
-    st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
     for _ in range(2):
         st.write()
     
     st.markdown("<hr style='margin: 1.5rem 0;'>", unsafe_allow_html=True)
-    if st.button("Lihat Ringkasan Dataset", use_container_width=True, key="btn_view_dataset"):
+    if st.button("View Dataset Summary", use_container_width=True, key="btn_view_dataset"):
         show_dataset_preview_modal()
 
 # Mengonversi string pilihan frekuensi menjadi kode parameter penanggalan standar Pandas
@@ -282,7 +282,7 @@ if selected_item != fallback_all_label:
     
     # Antisipasi jika pada kombinasi wilayah dan item tersebut tidak ditemukan jejak transaksi historis sama sekali
     if len(dataset_filtered) == 0:
-        st.warning(f"Tidak ada data historis yang ditemukan untuk {selected_item} di Wilayah: {selected_region}")
+        st.warning(f"No historical data found for {selected_item} in Region: {selected_region}")
         st.stop()
         
     # PENJELASAN DATA SCIENCE (Handling Missing Timesteps): 
@@ -482,19 +482,19 @@ if selected_item != fallback_all_label:
     <div style='text-align: left; line-height: 1.2;'>
         <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics ({prediction_basis} | Scope: {selected_region})</div>
         <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>{selected_item}</div>
-        <div style='font-size: 0.75rem; color: #B0B0B0;'>{selected_period} dengan menggunakan metode <span style='color: #00FFA6; font-weight: 600;'>{selected_method}</span></div>
+        <div style='font-size: 0.75rem; color: #B0B0B0;'>{selected_period} using <span style='color: #00FFA6; font-weight: 600;'>{selected_method}</span></div>
     </div>
     """
     
     # Membuat blok informasi HTML dinamis untuk diletakkan pada header visual bagian kanan (Berisi Nilai Prediksi & Skor Akurasi)
     html_info_box = f"""
     <div style='text-align: right; line-height: 1.3;'>
-        <div style='font-size: 0.85rem; color: #E0E0E0; font-weight: 500;'>Prediksi {periode_label}</div>
+        <div style='font-size: 0.85rem; color: #E0E0E0; font-weight: 500;'>Prediction for {periode_label}</div>
         <div style='font-size: 1.5rem; font-weight: 700; color: #FFFFFF; margin: 1px 0;'>{predicted_value:,} Qty</div>
         <div style='font-size: 0.72rem; color: #B0B0B0;'>
-            <span style='color: #FFFFFF; font-weight: 600;'>[Evaluasi Model]</span> 
-            Skor Akurasi WMAPE: <span style='color: #00FFA6; font-weight: 600;'>{accuracy_score:.1f}%</span><br/>
-            Deviasi Rata-Rata MAE: <span style='color: #FFB300; font-weight: 600;'>&plusmn; {mae_val:.0f} qty</span> | 
+            <span style='color: #FFFFFF; font-weight: 600;'>[Model Evaluation]</span> 
+            [Accuracy Score] WMAPE: <span style='color: #00FFA6; font-weight: 600;'>{accuracy_score:.1f}%</span><br/>
+            MAE: <span style='color: #FFB300; font-weight: 600;'>&plusmn; {mae_val:.0f} qty</span> | 
             RMSE: <span style='color: #FF6B6B; font-weight: 600;'>&plusmn; {rmse_val:.0f} qty</span>
         </div>
     </div>
@@ -544,9 +544,9 @@ if selected_item != fallback_all_label:
     # Injeksi legenda penunjuk warna kustom berbasis elemen HTML div agar serasi dengan desain tema gelap aplikasi
     html_custom_legend = """
     <div class='custom-legend-container'>
-        <div class='legend-item'><div class='legend-color-box' style='background-color: #4A90E2;'></div>Historical Sales (Data Aktual Latih)</div>
-        <div class='legend-item'><div class='legend-color-box' style='background-color: #F5A623;'></div>Model Evaluation [20%] (Uji Akurasi)</div>
-        <div class='legend-item'><div class='legend-color-box' style='background-color: #FF4B4B;'></div>Forecast (Proyeksi Masa Depan)</div>
+        <div class='legend-item'><div class='legend-color-box' style='background-color: #4A90E2;'></div>Historical Sales</div>
+        <div class='legend-item'><div class='legend-color-box' style='background-color: #F5A623;'></div>Model Evaluation [20%]</div>
+        <div class='legend-item'><div class='legend-color-box' style='background-color: #FF4B4B;'></div>Forecast</div>
     </div>
     """
 
@@ -561,13 +561,13 @@ else:
     <div style='text-align: left; line-height: 1.2;'>
         <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics (Scope: {selected_region})</div>
         <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>{selected_item}</div>
-        <div style='font-size: 0.75rem; color: #B0B0B0;'>Sumber Data: <span style='color: #00FFA6; font-weight: 600;'>dataset.csv</span></div>
+        <div style='font-size: 0.75rem; color: #B0B0B0;'>Source: <span style='color: #00FFA6; font-weight: 600;'>dataset.csv</span></div>
     </div>
     """
     html_info_box = "" # Mengosongkan boks info metrik akurasi karena tidak ada pemodelan yang dieksekusi
     
     if len(dataset_working) == 0:
-        st.warning(f"Tidak ada data transaksi historis untuk kombinasi wilayah ini: {selected_region}")
+        st.warning(f"No historical transaction data found for Region: {selected_region}")
         st.stop()
         
     # Mengompilasi linimasa global komparatif
