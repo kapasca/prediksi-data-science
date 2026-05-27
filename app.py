@@ -8,6 +8,7 @@ from xgboost import XGBRegressor
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from prophet import Prophet
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from statsmodels.tsa.arima.model import ARIMA
 
 # Menonaktifkan log internal dari library Prophet dan Stan agar konsol terminal tetap bersih
 logging.getLogger('prophet').setLevel(logging.ERROR)
@@ -227,7 +228,7 @@ with st.sidebar:
     
     # PILIHAN FILTER 5: Penentuan Algoritma Matematika / Machine Learning yang akan digunakan
     st.markdown("<div class='sidebar-label'>Machine Learning Algorithm</div>", unsafe_allow_html=True)
-    algorithm_options = ["Linear Regression", "Moving Average", "XGBoost", "Exponential Smoothing", "Prophet"]
+    algorithm_options = ["Linear Regression", "Moving Average", "XGBoost", "Exponential Smoothing", "Prophet", "ARIMA"]
     selected_method = st.selectbox("", algorithm_options, index=0, label_visibility="collapsed", key="ctl_method")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
@@ -444,6 +445,39 @@ if selected_item != fallback_all_label:
                 forecast_final = m_final.predict(future_final)
                 predicted_value = max(0, int(forecast_final['yhat'].iloc[-1]))
             except:
+                y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
+                predicted_value = int(np.mean(y_target[-2:])) if len(y_target) >= 2 else 0
+                
+        # --- ALGORITMA 6: ARIMA (Autoregressive Integrated Moving Average) ---
+        # Pola pikir: Model statistik klasik yang menggabungkan komponen Autoregressive (AR), Differencing (I), dan Moving Average (MA) untuk menangkap pola temporal.
+        elif selected_method == "ARIMA":
+            # Menyiapkan data latih dan target dalam bentuk Pandas Series berindeks tanggal asli
+            series_train = pd.Series(y_train, index=original_datetime_index[:split_index])
+            series_target = pd.DataFrame(y_target, index=original_datetime_index)
+            
+            # Memastikan frekuensi indeks terdefinisi dengan baik agar ARIMA tidak mengeluarkan peringatan (warning)
+            series_train.index.freq = freq_code
+            series_target.index.freq = freq_code
+            
+            try:
+                # 1. Tahap Evaluasi: Melatih model pada 80% data untuk memprediksi sisa 20% data uji
+                model_evaluator = ARIMA(series_train, order=(1, 1, 1))
+                model_eval_fitted = model_evaluator.fit()
+                
+                # Memprediksi rentang indeks data uji
+                y_pred_test = model_eval_fitted.predict(start=len(y_train), end=len(y_train) + len(y_test) - 1)
+                y_pred_test = np.maximum(0, y_pred_test.astype(int)).values # Konversi ke numpy array murni
+                
+                # 2. Tahap Produksi: Menggunakan 100% data penuh untuk memproyeksikan penjualan di masa depan
+                model_final = ARIMA(series_target, order=(1, 1, 1))
+                model_final_fitted = model_final.fit()
+                
+                # Melakukan peramalan 1 langkah (periode) ke depan
+                future_forecast = model_final_fitted.forecast(steps=1)
+                predicted_value = max(0, int(future_forecast.iloc[0]))
+                
+            except:
+                # Mekanisme pertahanan (Fallback) jika data tidak stasioner atau gagal konvergen
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
                 predicted_value = int(np.mean(y_target[-2:])) if len(y_target) >= 2 else 0
 
