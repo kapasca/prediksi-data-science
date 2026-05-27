@@ -66,11 +66,22 @@ st.markdown("""
             display: none;
         }
         
+        /* Mengurangi jarak antar blok komponen di sidebar */
+        [data-testid="stSidebarUserContent"] .stElementContainer {
+            margin-bottom: -10px !important; /* Nilai minus bikin makin rapat */
+        }
+        
+        /* Mengurangi padding vertikal bawaan widget selectbox */
+        [data-testid="stSidebarUserContent"] div[data-baseweb="select"] {
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+        }
+        
         /* Styling khusus teks label di dalam sidebar */
         .sidebar-label {
             font-size: 0.8rem !important;
             color: #B0B0B0 !important;
-            margin-bottom: 0.2rem;
+            margin-bottom: 1rem;
             font-weight: 500;
         }
         
@@ -182,7 +193,7 @@ def show_dataset_preview_modal():
 # 05. KONTROL ANTARMUKA PENGGUNA (SIDEBAR PANEL)
 # ==============================================================================
 with st.sidebar:
-    st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 1.7rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Control Panel</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 2.5rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Control Panel</h2>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 1: Wilayah Kerja (Region)
     st.markdown("<div class='sidebar-label'>Filter Wilayah (Region)</div>", unsafe_allow_html=True)
