@@ -9,20 +9,21 @@ from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from prophet import Prophet
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-# Suppress logs internal milik Prophet & Stan agar terminal bersih
+# Menonaktifkan log internal dari library Prophet dan Stan agar konsol terminal tetap bersih
 logging.getLogger('prophet').setLevel(logging.ERROR)
 logging.getLogger('cmdstanpy').setLevel(logging.ERROR)
 warnings.filterwarnings("ignore")
 
 # ==============================================================================
-# 01. APPLICATION CONFIGURATION & WEB METADATA
+# 01. KONFIGURASI APLIKASI & METADATA HALAMAN WEB
 # ==============================================================================
-# initial_sidebar_state="expanded" dipasang agar mencegah sidebar hilang total saat reload
+# Mengatur tata letak halaman menjadi mode lebar (wide) dan menentukan judul aplikasi pada tab peramban
 st.set_page_config(layout="wide", page_title="E-Commerce Sales Predictions", initial_sidebar_state="expanded")
 
 # ==============================================================================
-# 02. VISUAL UI ARCHITECTURE & CUSTOM CSS INJECTION
+# 02. ARSITEKTUR VISUAL & INJEKSI CUSTOM CSS
 # ==============================================================================
+# Menyuntikkan kode CSS kustom untuk memodifikasi elemen bawaan Streamlit demi estetika dan responsivitas antarmuka
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
@@ -101,162 +102,224 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 03. DATA PIPELINE - PHASE 1: INGESTION & DATA CLEANING
+# 03. PIPELINE DATA - FASE 1: INGESTI DATA & PEMBERSIHAN DATA (DATA CLEANING)
 # ==============================================================================
 @st.cache_data
 def load_raw_data():
+    """
+    Fungsi untuk membaca data mentah dari berkas CSV.
+    Menggunakan dekorator @st.cache_data agar data dimuat ke dalam memori lokal (cache),
+    sehingga aplikasi tidak perlu membaca ulang berkas fisik setiap kali pengguna berinteraksi.
+    """
     data = pd.read_csv("dataset.csv")
-    # Membersihkan baris yang kehilangan data kritikal untuk pemodelan
-    data = data.dropna(subset=['Product Name', 'Order Date', 'Quantity'])
+    
+    # Menentukan kolom-kolom kritikal yang wajib ada dan tidak boleh kosong demi kelancaran proses pemodelan
+    required_cols = ['Product Name', 'Order Date', 'Quantity']
+    if 'Category' in data.columns:
+        required_cols.append('Category')
+    if 'Region' in data.columns:
+        required_cols.append('Region')
+        
+    # Menghapus baris data yang tidak memiliki nilai (NaN) pada kolom-kolom kritikal tersebut
+    data = data.dropna(subset=required_cols)
+    
+    # Mengonversi format kolom tanggal menjadi tipe objek Datetime standar Pandas untuk analisis deret waktu
     data['Order Date'] = pd.to_datetime(data['Order Date'], errors='coerce')
+    
+    # Menghapus kembali jika ada kegagalan konversi tanggal yang menghasilkan nilai NaT (Not a Time)
     data = data.dropna(subset=['Order Date'])
     return data
 
+# Mengeksekusi fungsi pemuatan data dengan penanganan galat (Error Handling)
 try:
     dataset_raw = load_raw_data()
 except Exception as error:
-    st.error(f"Failed to read dataset file: {error}")
+    st.error(f"Gagal membaca berkas dataset: {error}")
     st.stop()
 
+# Mengekstraksi daftar unik dari dataset untuk mengisi opsi pada komponen dropdown antarmuka pengguna
 product_list = sorted(list(dataset_raw['Product Name'].unique()))
-
-# Inisialisasi session state untuk kontrol penampilan modal dataset
-if "show_dataset_modal" not in st.session_state:
-    st.session_state.show_dataset_modal = False
+category_list = sorted(list(dataset_raw['Category'].unique())) if 'Category' in dataset_raw.columns else []
+region_list = sorted(list(dataset_raw['Region'].unique())) if 'Region' in dataset_raw.columns else []
 
 # ==============================================================================
-# 04. SUB-ROUTINE: DATASET MODAL VIEWER FUNCTION
+# 04. SUB-RUTIN: MODAL PREVIEW DATASET MENTAH
 # ==============================================================================
 @st.dialog("RAW Dataset Preview", width="large")
 def show_dataset_preview_modal():
+    """
+    Fungsi sub-rutin untuk menampilkan jendela pop-up (modal) yang menyajikan
+    ringkasan statistik serta cuplikan data mentah kepada pengguna.
+    """
     st.markdown("<h3 style='color: #edae3e; text-align: center; margin-top: -1.5rem;'>RAW Dataset Preview</h3>", unsafe_allow_html=True)
     st.markdown("---")
     
+    # Menampilkan metrik utama volume data menggunakan tata letak tiga kolom
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Total Rows", len(dataset_raw))
+        st.metric("Total Baris", len(dataset_raw))
     with col2:
-        st.metric("Total Columns", len(dataset_raw.columns))
+        st.metric("Total Kolom", len(dataset_raw.columns))
     with col3:
-        st.metric("Products", len(product_list))
+        st.metric("Jumlah Produk Unik", len(product_list))
     
     st.markdown("")
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Column Names:</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Nama-Nama Kolom:</b></div>", unsafe_allow_html=True)
     st.write(dataset_raw.columns.tolist())
     
     st.markdown("")
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.85rem; margin: 1rem 0;'><b>Summary Statistics:</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.85rem; margin: 1rem 0;'><b>Ringkasan Statistik Deskriptif:</b></div>", unsafe_allow_html=True)
     st.dataframe(dataset_raw.describe(), use_container_width=True)
     
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Data Preview (First 50 rows):</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Pratinjau Data (50 Baris Pertama):</b></div>", unsafe_allow_html=True)
     st.dataframe(dataset_raw.head(50), use_container_width=True, height=350)
     
     st.markdown("---")
-    # Tombol close di bawah sekarang cukup memicu st.rerun() untuk menutup dialog secara bersih
-    if st.button("Close Preview", key="btn_close_dataset", use_container_width=True):
+    if st.button("Tutup Pratinjau", key="btn_close_dataset", use_container_width=True):
         st.rerun()
 
 # ==============================================================================
-# 05. USER INTERFACE CONTROLS (SIDEBAR PANEL)
+# 05. KONTROL ANTARMUKA PENGGUNA (SIDEBAR PANEL)
 # ==============================================================================
 with st.sidebar:
-    # TOP SECTION: Control Panel Title
     st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 1.7rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Control Panel</h2>", unsafe_allow_html=True)
     
-    st.markdown("<div class='sidebar-label'>Product Name Filter</div>", unsafe_allow_html=True)
-    product_options = ["All Products"] + product_list
-    selected_product = st.selectbox("", product_options, index=0, label_visibility="collapsed", key="ctl_product")
+    # PILIHAN FILTER 1: Wilayah Kerja (Region)
+    st.markdown("<div class='sidebar-label'>Filter Wilayah (Region)</div>", unsafe_allow_html=True)
+    region_options = ["All Regions"] + region_list
+    selected_region = st.selectbox("", region_options, index=0, label_visibility="collapsed", key="ctl_region")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
-    st.markdown("<div class='sidebar-label'>Forecasting Period</div>", unsafe_allow_html=True)
+    # PILIHAN FILTER 2: Basis Prediksi (Berdasarkan Produk Spesifik atau Kategori Global)
+    st.markdown("<div class='sidebar-label'>Basis Prediksi</div>", unsafe_allow_html=True)
+    prediction_basis = st.selectbox("", ["By Product", "By Category"], index=0, label_visibility="collapsed", key="ctl_basis")
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    
+    # PILIHAN FILTER 3: Filter Nama Item secara Adaptif mengikuti Basis Prediksi yang dipilih
+    st.markdown("<div class='sidebar-label'>Filter Nama Item</div>", unsafe_allow_html=True)
+    if prediction_basis == "By Product":
+        item_options = ["All Products"] + product_list
+        target_column = 'Product Name'
+        fallback_all_label = "All Products"
+    else:
+        item_options = ["All Categories"] + category_list
+        target_column = 'Category'
+        fallback_all_label = "All Categories"
+        
+    selected_item = st.selectbox("", item_options, index=0, label_visibility="collapsed", key="ctl_item")
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    
+    # PILIHAN FILTER 4: Granularitas Waktu atau Interval Agregasi Data Deret Waktu
+    st.markdown("<div class='sidebar-label'>Periode Peramalan (Forecasting Period)</div>", unsafe_allow_html=True)
     selected_period = st.selectbox("", ["Monthly", "Quarterly", "Weekly"], index=0, label_visibility="collapsed", key="ctl_period")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
-    st.markdown("<div class='sidebar-label'>Machine Learning Algorithm</div>", unsafe_allow_html=True)
+    # PILIHAN FILTER 5: Penentuan Algoritma Matematika / Machine Learning yang akan digunakan
+    st.markdown("<div class='sidebar-label'>Algoritma Machine Learning</div>", unsafe_allow_html=True)
     algorithm_options = ["Linear Regression", "Moving Average", "XGBoost", "Exponential Smoothing", "Prophet"]
     selected_method = st.selectbox("", algorithm_options, index=0, label_visibility="collapsed", key="ctl_method")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
-    st.markdown("<div class='sidebar-label'>Show Data</div>", unsafe_allow_html=True)
+    # PILIHAN FILTER 6: Batasan Rentang Data Historis yang Ditampilkan pada Sumbu Grafik X
+    st.markdown("<div class='sidebar-label'>Rentang Data yang Ditampilkan</div>", unsafe_allow_html=True)
     range_options = ["All Data", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%"]
     selected_range = st.selectbox("", range_options, index=0, label_visibility="collapsed", key="ctl_range")
     
-    # SPACER: Memberikan jarak vertikal yang dinamis ke bawah
     st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
-    for _ in range(5):
+    for _ in range(2):
         st.write()
     
-    # BOTTOM SECTION: Dataset Viewer Button (Teks statis, lurus tanpa ribet state)
     st.markdown("<hr style='margin: 1.5rem 0;'>", unsafe_allow_html=True)
-    
-    if st.button("View Dataset (Summary)", use_container_width=True, key="btn_view_dataset"):
+    if st.button("Lihat Ringkasan Dataset", use_container_width=True, key="btn_view_dataset"):
         show_dataset_preview_modal()
 
-# Konversi String Frekuensi ke Format Datetime Pandas
+# Mengonversi string pilihan frekuensi menjadi kode parameter penanggalan standar Pandas
 if selected_period == "Monthly":
-    freq_code = 'ME'
+    freq_code = 'ME' # Akhir Bulan (Month End)
 elif selected_period == "Quarterly":
-    freq_code = 'QE'
-else:  # Weekly
-    freq_code = 'W'
+    freq_code = 'QE' # Akhir Kuartal (Quarter End)
+else:
+    freq_code = 'W' # Mingguan (Weekly)
 
-# Picu penampilan fungsi dialog modal jika status True
-if st.session_state.show_dataset_modal:
-    show_dataset_preview_modal()
-
-# Judul utama dipasang di area konten utama kanan
 st.title("E-Commerce Sales Predictions")
 st.write("---")
 
-# Placeholder untuk rendering grafik
+# Membuat kontainer dinamis (placeholder) kosong yang nantinya akan diisi oleh komponen visualisasi grafik
 placeholder_chart = st.empty()
 
 # ==============================================================================
-# 06. DATA PIPELINE - PHASE 2: PROCESSING & MODEL FORECASTING (SINGLE PRODUCT)
+# FASE UPSTREAM FILTERING: KETERLIBATAN WILAYAH (REGION) DALAM PIPELINE DATA SCIENCE
 # ==============================================================================
-if selected_product != "All Products":
-    # --------------------------------------------------------------------------
-    # SUB-PHASE A: TIME-SERIES RESAMPLING & RE-INDEXING
-    # --------------------------------------------------------------------------
-    dataset_product = dataset_raw[dataset_raw['Product Name'] == selected_product]
+# PENJELASAN DATA SCIENCE: Agar model cerdas dan peka terhadap dinamika lokal (Granular Forecasting),
+# data dipotong berdasarkan Region di hulu SEBELUM proses penyusunan ulang struktur data (resampling).
+# Hal ini memastikan fase pelatihan (training) model benar-benar murni mempelajari pola transaksi dari wilayah tersebut.
+if selected_region != "All Regions":
+    dataset_working = dataset_raw[dataset_raw['Region'] == selected_region]
+else:
+    dataset_working = dataset_raw.copy()
+
+# ==============================================================================
+# 06. PIPELINE DATA - FASE 2: PEMROSESAN & PERAMALAN MODEL (MODE ITEM TUNGGAL)
+# ==============================================================================
+if selected_item != fallback_all_label:
     
-    # Membuat timeline penuh untuk menangani 'missing period' menggunakan reindex
-    full_timeline = pd.date_range(start=dataset_product['Order Date'].min(), end=dataset_product['Order Date'].max(), freq=freq_code)
-    df_interim = dataset_product.resample(freq_code, on='Order Date')['Quantity'].sum()
+    # --------------------------------------------------------------------------
+    # SUB-FASE A: PENYUSUNAN ULANG STRUKTUR DERET WAKTU & RE-INDEXING
+    # --------------------------------------------------------------------------
+    # Menyaring data berdasarkan item spesifik yang dipilih oleh pengguna
+    dataset_filtered = dataset_working[dataset_working[target_column] == selected_item]
+    
+    # Antisipasi jika pada kombinasi wilayah dan item tersebut tidak ditemukan jejak transaksi historis sama sekali
+    if len(dataset_filtered) == 0:
+        st.warning(f"Tidak ada data historis yang ditemukan untuk {selected_item} di Wilayah: {selected_region}")
+        st.stop()
+        
+    # PENJELASAN DATA SCIENCE (Handling Missing Timesteps): 
+    # Transaksi e-commerce bersifat intermiten (tidak terjadi setiap hari). Kita harus membuat linimasa waktu yang utuh 
+    # tanpa ada hari/bulan yang bolong dari tanggal awal hingga akhir, kemudian menjumlahkan kuantitas penjualan (SUM).
+    full_timeline = pd.date_range(start=dataset_filtered['Order Date'].min(), end=dataset_filtered['Order Date'].max(), freq=freq_code)
+    df_interim = dataset_filtered.resample(freq_code, on='Order Date')['Quantity'].sum()
+    
+    # Mengisi kekosongan periode dengan nilai 0 (asumsi tidak ada penjualan) agar pola temporal tidak rusak saat dipelajari model
     dataset_resampled = df_interim.reindex(full_timeline, fill_value=0).to_frame()
     dataset_resampled = dataset_resampled.sort_index()
     
     original_datetime_index = dataset_resampled.index.copy()
     
-    # Pemetaan string label sumbu X berdasarkan periode pilihan user
+    # Membuat label string kustom untuk sumbu X grafik agar nyaman dibaca manusia
     if selected_period == "Weekly":
         chart_string_labels = dataset_resampled.index.map(lambda dt: f"{dt.strftime('%Y-%m')} (W-{dt.isocalendar()[1]})").tolist()
     elif selected_period == "Quarterly":
         chart_string_labels = dataset_resampled.index.map(lambda dt: f"{dt.strftime('%Y')}-Q{(dt.month-1)//3 + 1}").tolist()
-    else:  # Monthly
+    else:
         chart_string_labels = dataset_resampled.index.strftime('%Y-%m').tolist()
 
-    # Feature Engineering (Untuk Linear Regression & XGBoost supervised learning)
-    dataset_resampled['Timestep'] = np.arange(len(dataset_resampled))
-    dataset_resampled['Month'] = dataset_resampled.index.month
-    dataset_resampled['Year'] = dataset_resampled.index.year
-    dataset_resampled['Lag_1'] = dataset_resampled['Quantity'].shift(1).bfill()
+    # PENJELASAN DATA SCIENCE (Feature Engineering):
+    # Mengonversi informasi tanggal menjadi fitur-fitur numerik baru agar dapat dicerna oleh algoritma Machine Learning supervised.
+    dataset_resampled['Timestep'] = np.arange(len(dataset_resampled)) # Angka urut sebagai representasi berjalannya waktu
+    dataset_resampled['Month'] = dataset_resampled.index.month # Menangkap pola musiman bulanan (Seasonality)
+    dataset_resampled['Year'] = dataset_resampled.index.year # Menangkap tren pertumbuhan tahunan
+    dataset_resampled['Lag_1'] = dataset_resampled['Quantity'].shift(1).bfill() # Penjualan periode sebelumnya sebagai prediktor
     
+    # Menentukan fitur pembelajar berdasarkan kebutuhan kompleksitas algoritma
     if selected_method == "XGBoost":
-        feature_cols = ['Timestep', 'Month', 'Year', 'Lag_1']
+        feature_cols = ['Timestep', 'Month', 'Year', 'Lag_1'] # XGBoost butuh banyak konteks fitur
     else:
-        feature_cols = ['Timestep']
+        feature_cols = ['Timestep'] # Model statistik dasar hanya berbasis laju indeks waktu
         
-    X_features = dataset_resampled[feature_cols].values
-    y_target = dataset_resampled['Quantity'].values
+    X_features = dataset_resampled[feature_cols].values # Matriks Fitur (Variabel Independen)
+    y_target = dataset_resampled['Quantity'].values # Target Luaran (Variabel Dependen)
     
-    # Pembagian Data: 80% Training Data dan 20% Testing Data untuk Model Evaluation
+    # PENJELASAN DATA SCIENCE (Data Splitting):
+    # Membagi data menjadi 80% Data Latih (Training) untuk melatih kecerdasan model,
+    # dan 20% Data Uji (Testing) yang dirahasiakan dari model untuk mengukur kemampuan akurasi riilnya nanti.
     split_index = int(len(dataset_resampled) * 0.8)
     if split_index == 0: split_index = 1
     
     X_train, X_test = X_features[:split_index], X_features[split_index:]
     y_train, y_test = y_target[:split_index], y_target[split_index:]
     
+    # Inisialisasi variabel penampung nilai metrik performa
     predicted_value = 0
     mape_error = 0
     mae_val = 0
@@ -266,63 +329,75 @@ if selected_product != "All Products":
     y_pred_test = np.zeros(len(y_test))
     
     # --------------------------------------------------------------------------
-    # SUB-PHASE B: MACHINE LEARNING & STATISTICAL FORECASTING CORE ENGINE
+    # SUB-FASE B: INTI MESIN PROSES PEMODELAN ML & FORECASTING STATISTIK
     # --------------------------------------------------------------------------
     if len(dataset_resampled) >= 2:
         
-        # --- ALGORITMA 1: LINEAR REGRESSION ---
+        # --- ALGORITMA 1: LINEAR REGRESSION (Regresi Linear) ---
+        # Pola pikir: Mencari garis lurus terbaik yang menghubungkan pergerakan waktu dengan volume penjualan.
         if selected_method == "Linear Regression":
+            # Tahap Evaluasi: Melatih model pada 80% data untuk memprediksi sisa 20% data uji
             model_evaluator = LinearRegression()
             model_evaluator.fit(X_train, y_train)
             y_pred_test = model_evaluator.predict(X_test)
-            y_pred_test = np.maximum(0, y_pred_test.astype(int))
+            y_pred_test = np.maximum(0, y_pred_test.astype(int)) # Nilai kuantitas barang tidak boleh bernilai negatif
             
+            # Tahap Produksi: Menggunakan 100% data penuh untuk memproyeksikan penjualan di masa depan
             model_final = LinearRegression()
             model_final.fit(X_features, y_target)
             next_timestep = np.array([[len(dataset_resampled)]])
             predicted_value = max(0, int(model_final.predict(next_timestep)[0]))
             
-        # --- ALGORITMA 2: MOVING AVERAGE ---
+        # --- ALGORITMA 2: MOVING AVERAGE (Rata-rata Bergerak) ---
+        # Pola pikir: Memprediksi masa depan murni berdasarkan rata-rata penjualan dari beberapa periode terakhir.
         elif selected_method == "Moving Average":
-            rolling_window = min(3, len(y_train))
+            rolling_window = min(3, len(y_train)) # Mengambil jendela 3 periode ke belakang
             y_pred_list = []
             training_history = list(y_train)
             
+            # Simulasi prediksi langkah demi langkah melintasi garis data uji (Testing Data)
             for idx in range(len(y_test)):
                 window_prediction = np.mean(training_history[-rolling_window:]) if len(training_history) >= rolling_window else 0
                 y_pred_list.append(window_prediction)
-                training_history.append(y_test[idx])
+                training_history.append(y_test[idx]) # Memasukkan nilai aktual sebenarnya ke dalam histori untuk langkah berikutnya
             
             y_pred_test = np.array(y_pred_list).astype(int)
             predicted_value = int(np.mean(y_target[-rolling_window:])) if len(y_target) >= rolling_window else 0
 
-        # --- ALGORITMA 3: XGBOOST ---
+        # --- ALGORITMA 3: XGBOOST (Extreme Gradient Boosting) ---
+        # Pola pikir: Algoritma tingkat lanjut berbasis pohon keputusan (Decision Trees) yang belajar secara bertahap dari kesalahan sebelumnya.
         elif selected_method == "XGBoost":
+            # Proteksi jika sampel data terlalu sedikit, alihkan otomatis ke perhitungan rata-rata sederhana demi stabilitas aplikasi
             if len(dataset_resampled) < 5:
                 rolling_window = min(3, len(y_train))
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
                 predicted_value = int(np.mean(y_target[-rolling_window:])) if len(y_target) >= rolling_window else 0
             else:
+                # Melakukan evaluasi internal pada data uji menggunakan struktur pohon keputusan
                 model_evaluator = XGBRegressor(n_estimators=50, max_depth=3, random_state=42, learning_rate=0.1)
                 model_evaluator.fit(X_train, y_train)
                 y_pred_test = model_evaluator.predict(X_test)
                 y_pred_test = np.maximum(0, y_pred_test.astype(int))
                 
+                # Melakukan pelatihan final menggunakan seluruh spektrum data aktual yang tersedia
                 model_final = XGBRegressor(n_estimators=50, max_depth=3, random_state=42, learning_rate=0.1)
                 model_final.fit(X_features, y_target)
                 
+                # Mengalkulasi nilai tanggal fiktif di masa depan untuk mengonstruksi fitur penanggalan baru
                 last_date_parsed = original_datetime_index[-1]
                 if selected_period == "Monthly":
                     future_date_obj = last_date_parsed + pd.DateOffset(months=1)
                 elif selected_period == "Quarterly":
                     future_date_obj = last_date_parsed + pd.DateOffset(months=3)
-                else:  # Weekly
+                else:
                     future_date_obj = last_date_parsed + pd.Timedelta(weeks=1)
                 
+                # Menyusun array dimensi baru berisi informasi waktu masa depan untuk dilempar ke model XGBoost
                 X_future_step = np.array([[len(dataset_resampled), future_date_obj.month, future_date_obj.year, y_target[-1]]])
                 predicted_value = max(0, int(model_final.predict(X_future_step)[0]))
 
-        # --- ALGORITMA 4: EXPONENTIAL SMOOTHING ---
+        # --- ALGORITMA 4: EXPONENTIAL SMOOTHING (Pemulusan Eksponensial / Holt-Winters) ---
+        # Pola pikir: Model statistik penanggalan waktu yang memberikan bobot lebih berat pada data terbaru dibandingkan data masa lampau.
         elif selected_method == "Exponential Smoothing":
             try:
                 model_evaluator = ExponentialSmoothing(y_train, initialization_method="estimated").fit()
@@ -332,11 +407,14 @@ if selected_product != "All Products":
                 model_final = ExponentialSmoothing(y_target, initialization_method="estimated").fit()
                 predicted_value = max(0, int(model_final.forecast(1)[0]))
             except:
+                # Mekanisme pertahanan (Fallback) jika matriks perhitungan matematika mendeteksi singularitas atau kegagalan konvergensi
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
                 predicted_value = int(np.mean(y_target[-2:])) if len(y_target) >= 2 else 0
 
-        # --- ALGORITMA 5: PROPHET ---
+        # --- ALGORITMA 5: PROPHET (Dikembangkan oleh Meta/Facebook) ---
+        # Pola pikir: Model aditif canggih yang memecah deret waktu menjadi komponen Tren, Musiman (Seasonality), dan Efek Hari Libur.
         elif selected_method == "Prophet":
+            # Kebijakan Khusus: Prophet mewajibkan struktur kolom yang kaku, yaitu kolom waktu dinamai 'ds' dan target dinamai 'y'
             df_prophet = pd.DataFrame({'ds': original_datetime_index, 'y': y_target})
             df_train = df_prophet.iloc[:split_index]
             
@@ -358,77 +436,93 @@ if selected_product != "All Products":
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
                 predicted_value = int(np.mean(y_target[-2:])) if len(y_target) >= 2 else 0
 
-        # Taruh hasil prediksi test ke dalam array render visual
+        # Menyisipkan hasil prediksi uji ke dalam susunan data evaluasi untuk visualisasi grafik (Garis Kuning)
         y_eval_preds[split_index:] = y_pred_test
 
-        # Perhitungan Metrik Evaluasi (WMAPE, MAE, RMSE)
+        # PENJELASAN DATA SCIENCE (Metrik Evaluasi Performa Model):
+        # 1. WMAPE (Weighted Mean Absolute Percentage Error): Mengukur persentase rata-rata deviasi kesalahan prediksi.
         sum_actual = np.sum(y_test)
         if sum_actual > 0:
             mape_error = (np.sum(np.abs(y_test - y_pred_test)) / sum_actual) * 100
         else:
             mape_error = 100.0 if np.sum(y_pred_test) > 0 else 0.0
             
+        # 2. MAE (Mean Absolute Error): Rata-rata absolut jarak selisih antara jumlah barang asli dengan hasil tebakan model.
         mae_val = mean_absolute_error(y_test, y_pred_test)
+        
+        # 3. RMSE (Root Mean Squared Error): Kembaran MAE namun memberikan hukuman (penalti) kuadrat jauh lebih berat pada kesalahan tebakan yang fatal.
         rmse_val = np.sqrt(mean_squared_error(y_test, y_pred_test))
 
     # --------------------------------------------------------------------------
-    # SUB-PHASE C: KPI METRICS & DATAFRAME RENDERING PACKING
+    # SUB-FASE C: FORMALISASI KPI METRIK & PENGEPAKAN DATAFRAME UNTUK GRAFIK
     # --------------------------------------------------------------------------
+    # Menghitung skor akurasi teoritis berbasis 100 dikurangi persentase galat WMAPE
     accuracy_score = max(0.0, 100.0 - mape_error)
+    
     if selected_period == "Monthly":
         periode_label = "Next Month"
     elif selected_period == "Quarterly":
         periode_label = "Next Quarter"
-    else:  # Weekly
+    else:
         periode_label = "Next Week"
     
+    # Membuat blok informasi HTML dinamis untuk diletakkan pada header visual bagian kiri
     html_title_box = f"""
     <div style='text-align: left; line-height: 1.2;'>
-        <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics</div>
-        <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>{selected_product}</div>
-        <div style='font-size: 0.75rem; color: #B0B0B0;'>{selected_period} with <span style='color: #00FFA6; font-weight: 600;'>{selected_method}</span></div>
+        <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics ({prediction_basis} | Scope: {selected_region})</div>
+        <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>{selected_item}</div>
+        <div style='font-size: 0.75rem; color: #B0B0B0;'>{selected_period} dengan menggunakan metode <span style='color: #00FFA6; font-weight: 600;'>{selected_method}</span></div>
     </div>
     """
     
+    # Membuat blok informasi HTML dinamis untuk diletakkan pada header visual bagian kanan (Berisi Nilai Prediksi & Skor Akurasi)
     html_info_box = f"""
     <div style='text-align: right; line-height: 1.3;'>
-        <div style='font-size: 0.85rem; color: #E0E0E0; font-weight: 500;'>{periode_label} Prediction</div>
+        <div style='font-size: 0.85rem; color: #E0E0E0; font-weight: 500;'>Prediksi {periode_label}</div>
         <div style='font-size: 1.5rem; font-weight: 700; color: #FFFFFF; margin: 1px 0;'>{predicted_value:,} Qty</div>
         <div style='font-size: 0.72rem; color: #B0B0B0;'>
-            <span style='color: #FFFFFF; font-weight: 600;'>[Accuracy Score]</span> 
-            WMAPE: <span style='color: #00FFA6; font-weight: 600;'>{accuracy_score:.1f}%</span><br/>
-            MAE: <span style='color: #FFB300; font-weight: 600;'>&plusmn; {mae_val:.0f} qty</span> | 
+            <span style='color: #FFFFFF; font-weight: 600;'>[Evaluasi Model]</span> 
+            Skor Akurasi WMAPE: <span style='color: #00FFA6; font-weight: 600;'>{accuracy_score:.1f}%</span><br/>
+            Deviasi Rata-Rata MAE: <span style='color: #FFB300; font-weight: 600;'>&plusmn; {mae_val:.0f} qty</span> | 
             RMSE: <span style='color: #FF6B6B; font-weight: 600;'>&plusmn; {rmse_val:.0f} qty</span>
         </div>
     </div>
     """
     
+    # Mengalkulasi label string penunjuk masa depan di sumbu X grafik
     last_date_parsed = original_datetime_index[-1]
     if selected_period == "Monthly":
         future_date_string = (last_date_parsed + pd.DateOffset(months=1)).strftime('%Y-%m')
     elif selected_period == "Quarterly":
         future_date = last_date_parsed + pd.DateOffset(months=3)
         future_date_string = f"{future_date.strftime('%Y')}-Q{(future_date.month-1)//3 + 1}"
-    else:  # Weekly
+    else:
         future_date = last_date_parsed + pd.Timedelta(weeks=1)
         future_date_string = f"{future_date.strftime('%Y-%m')} (W-{future_date.isocalendar()[1]})"
 
+    # Menyusun tabel visualisasi data tunggal (Single Render Dataframe)
     df_single_render = pd.DataFrame(index=chart_string_labels, columns=['Historical Sales', 'Model Evaluation [20%]', 'Forecast'])
     df_single_render['Historical Sales'] = y_target
     df_single_render['Model Evaluation [20%]'] = y_eval_preds
     
+    # Menyambungkan ujung garis historis dengan pangkal awal garis ramalan masa depan agar tidak terputus secara visual
     last_historical_label = chart_string_labels[-1]
     df_single_render.loc[last_historical_label, 'Forecast'] = y_target[-1]
     df_single_render.loc[future_date_string] = [np.nan, np.nan, predicted_value]
     
+    # Memotong baris visualisasi jika pengguna meminta pembatasan persentase data (Show Data Filter)
     if selected_range != "All Data":
         pct = int(selected_range.replace("%", "")) / 100.0
         keep_points = max(2, int(len(df_single_render) * pct))
         df_single_render = df_single_render.iloc[-keep_points:]
         
     df_single_render = df_single_render.replace([np.inf, -np.inf], np.nan)
+    
+    # Melelehkan struktur dataframe (Melt Technique) dari format mendatar (Wide) menjadi memanjang ke bawah (Long)
+    # Ini merupakan standar format masukan mutlak agar library grafik Vega-Lite/Altair bisa membedakan warna garis.
     df_melted = df_single_render.reset_index().rename(columns={'index': 'Date'}).melt('Date', var_name='Category', value_name='Amount')
     
+    # Konfigurasi skema warna pembeda untuk masing-masing tipe kategori garis pada grafik tunggal
     color_schema = {
         "field": "Category", 
         "type": "nominal", 
@@ -436,66 +530,86 @@ if selected_product != "All Products":
         "legend": None
     }
     
+    # Injeksi legenda penunjuk warna kustom berbasis elemen HTML div agar serasi dengan desain tema gelap aplikasi
     html_custom_legend = """
     <div class='custom-legend-container'>
-        <div class='legend-item'><div class='legend-color-box' style='background-color: #4A90E2;'></div>Historical Sales</div>
-        <div class='legend-item'><div class='legend-color-box' style='background-color: #F5A623;'></div>Model Evaluation [20%]</div>
-        <div class='legend-item'><div class='legend-color-box' style='background-color: #FF4B4B;'></div>Forecast</div>
+        <div class='legend-item'><div class='legend-color-box' style='background-color: #4A90E2;'></div>Historical Sales (Data Aktual Latih)</div>
+        <div class='legend-item'><div class='legend-color-box' style='background-color: #F5A623;'></div>Model Evaluation [20%] (Uji Akurasi)</div>
+        <div class='legend-item'><div class='legend-color-box' style='background-color: #FF4B4B;'></div>Forecast (Proyeksi Masa Depan)</div>
     </div>
     """
 
 else:
     # ==============================================================================
-    # 07. DATA PIPELINE - ALL PRODUCTS MODE (FALLBACK MULTI LINE)
+    # 07. PIPELINE DATA - MODE MULTI ITEM / SEMUA ITEM (FALLBACK MULTI LINE CHART)
     # ==============================================================================
-    html_title_box = """
+    # PENJELASAN LOGIKA APLIKASI: Jika pengguna memilih opsi "All Products" atau "All Categories", 
+    # aplikasi tidak menjalankan proses latih model karena beban komputasi akan meledak secara berlebihan. 
+    # Sebagai gantinya, aplikasi menampilkan grafik komparasi pertumbuhan volume antar item secara langsung.
+    html_title_box = f"""
     <div style='text-align: left; line-height: 1.2;'>
-        <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics</div>
-        <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>All Products</div>
-        <div style='font-size: 0.75rem; color: #B0B0B0;'>Source: <span style='color: #00FFA6; font-weight: 600;'>dataset.csv</span></div>
+        <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics (Scope: {selected_region})</div>
+        <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>{selected_item}</div>
+        <div style='font-size: 0.75rem; color: #B0B0B0;'>Sumber Data: <span style='color: #00FFA6; font-weight: 600;'>dataset.csv</span></div>
     </div>
     """
-    html_info_box = ""
+    html_info_box = "" # Mengosongkan boks info metrik akurasi karena tidak ada pemodelan yang dieksekusi
     
-    global_timeline = dataset_raw.resample(freq_code, on='Order Date')['Quantity'].sum().index
+    if len(dataset_working) == 0:
+        st.warning(f"Tidak ada data transaksi historis untuk kombinasi wilayah ini: {selected_region}")
+        st.stop()
+        
+    # Mengompilasi linimasa global komparatif
+    global_timeline = dataset_working.resample(freq_code, on='Order Date')['Quantity'].sum().index
     if selected_period == "Weekly":
         fallback_labels = global_timeline.map(lambda dt: f"{dt.strftime('%Y-%m')} (W-{dt.isocalendar()[1]})").tolist()
     elif selected_period == "Quarterly":
         fallback_labels = global_timeline.map(lambda dt: f"{dt.strftime('%Y')}-Q{(dt.month-1)//3 + 1}").tolist()
-    else:  # Monthly
+    else:
         fallback_labels = global_timeline.strftime('%Y-%m').tolist()
         
     df_all_render = pd.DataFrame(index=fallback_labels)
     
-    for product_item in product_list:
-        dataset_p_filter = dataset_raw[dataset_raw['Product Name'] == product_item]
-        dataset_p_res = dataset_p_filter.resample(freq_code, on='Order Date')['Quantity'].sum().reindex(global_timeline, fill_value=0)
-        df_all_render[product_item] = dataset_p_res.values
+    # Menentukan target perulangan item berdasarkan basis prediksi yang aktif
+    loop_items = product_list if prediction_basis == "By Product" else category_list
+    
+    # Memetakan performa kuantitas penjualan masing-masing item ke dalam kolom-kolom tabel mandiri
+    for item in loop_items:
+        dataset_item_filter = dataset_working[dataset_working[target_column] == item]
+        if len(dataset_item_filter) > 0:
+            dataset_item_res = dataset_item_filter.resample(freq_code, on='Order Date')['Quantity'].sum().reindex(global_timeline, fill_value=0)
+            df_all_render[item] = dataset_item_res.values
+        else:
+            df_all_render[item] = 0 # Diisi nol jika item tersebut tidak pernah terjual sama sekali di wilayah bersangkutan
         
     if selected_range != "All Data":
         pct = int(selected_range.replace("%", "")) / 100.0
         keep_points = max(2, int(len(df_all_render) * pct))
         df_all_render = df_all_render.iloc[-keep_points:]
         
+    # Transformasi struktur data meleleh (Melt) untuk persiapan plotting multi-line chart
     df_melted = df_all_render.reset_index().rename(columns={'index': 'Date'}).melt('Date', var_name='Category', value_name='Amount')
     
+    # Biarkan sistem grafik mengalokasikan variasi warna garis secara otomatis (Nominal Color Mapping)
     color_schema = {
         "field": "Category", 
         "type": "nominal",
         "legend": None
     }
     
+    # Penyusunan komponen legenda melingkar kustom untuk mewakili identitas puluhan item sekaligus
     html_custom_legend = "<div class='custom-legend-container' style='flex-wrap: wrap; max-width: 80%; margin: 0 auto; gap: 15px;'>"
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
-    for i, product_item in enumerate(product_list):
+    for i, item in enumerate(loop_items):
         c = colors[i % len(colors)]
-        html_custom_legend += f"<div class='legend-item'><div class='legend-color-box' style='background-color: {c}; height: 10px; width: 10px; border-radius: 50%;'></div>{product_item}</div>"
+        html_custom_legend += f"<div class='legend-item'><div class='legend-color-box' style='background-color: {c}; height: 10px; width: 10px; border-radius: 50%;'></div>{item}</div>"
     html_custom_legend += "</div>"
 
 # ==============================================================================
-# 08. DYNAMIC PLACEHOLDER INJECTION & ENGINE GRAPHICS RENDERING
+# 08. INJEKSI KONTEN DINAMIS & EKSEKUSI RENDERING GRAFIK MESIN VEGA-LITE
 # ==============================================================================
 with placeholder_chart.container():
+    # Membuat struktur baris atas berisi judul informasi di kiri dan skor akurasi di kanan
     col_title, col_info = st.columns([1, 1])
     
     with col_title:
@@ -505,26 +619,29 @@ with placeholder_chart.container():
         if html_info_box:
             st.markdown(html_info_box, unsafe_allow_html=True)
             
+    # Menyuntikkan legenda visual kustom tepat di atas badan grafik
     st.markdown(html_custom_legend, unsafe_allow_html=True)
             
+    # Deklarasi JSON spesifikasi teknis pembuatan grafik berbasis pustaka mesin deklaratif Vega-Lite
     vega_lite_spec = {
         "width": "container",
         "height": "container",
         "mark": {
             "type": "line", 
-            "tooltip": True, 
-            "interpolate": "linear",
-            "point": {"size": 60, "filled": True, "cursor": "pointer"}
+            "tooltip": True, # Mengaktifkan boks informasi nilai (tooltip) saat kursor mouse mendekati titik data
+            "interpolate": "linear", # Metode penarikan garis lurus antar koordinat titik waktu
+            "point": {"size": 60, "filled": True, "cursor": "pointer"} # Mempertegas visualisasi simpul koordinat berupa lingkaran
         },
         "encoding": {
             "x": {"field": "Date", "type": "nominal", "sort": None, "axis": {"labelAngle": -90, "title": None}},
-            "y": {"field": "Amount", "type": "quantitative", "axis": {"title": "Transaction Volume"}},
+            "y": {"field": "Amount", "type": "quantitative", "axis": {"title": "Volume Transaksi (Qty)"}},
             "color": color_schema
         },
         "config": {
-            "background": "transparent",
+            "background": "transparent", # Mengintegrasikan latar belakang grafik agar menyatu jernih dengan tema gelap Streamlit
             "view": {"stroke": "transparent"}
         }
     }
     
+    # Melempar olahan data final beserta spesifikasi teknisnya ke dalam komponen visualisasi bawaan Streamlit
     st.vega_lite_chart(df_melted, vega_lite_spec, use_container_width=True)
