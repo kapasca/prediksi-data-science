@@ -195,18 +195,12 @@ def show_dataset_preview_modal():
 with st.sidebar:
     st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 2.5rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Control Panel</h2>", unsafe_allow_html=True)
     
-    # PILIHAN FILTER 1: Wilayah Kerja (Region)
-    st.markdown("<div class='sidebar-label'>Filter Wilayah (Region)</div>", unsafe_allow_html=True)
-    region_options = ["All Regions"] + region_list
-    selected_region = st.selectbox("", region_options, index=0, label_visibility="collapsed", key="ctl_region")
-    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
-    
-    # PILIHAN FILTER 2: Basis Prediksi (Berdasarkan Produk Spesifik atau Kategori Global)
+    # PILIHAN FILTER 1: Basis Prediksi (Berdasarkan Produk Spesifik atau Kategori Global)
     st.markdown("<div class='sidebar-label'>Basis Prediksi</div>", unsafe_allow_html=True)
     prediction_basis = st.selectbox("", ["By Product", "By Category"], index=0, label_visibility="collapsed", key="ctl_basis")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
-    # PILIHAN FILTER 3: Filter Nama Item secara Adaptif mengikuti Basis Prediksi yang dipilih
+    # PILIHAN FILTER 2: Filter Nama Item secara Adaptif mengikuti Basis Prediksi yang dipilih
     st.markdown("<div class='sidebar-label'>Filter Nama Item</div>", unsafe_allow_html=True)
     if prediction_basis == "By Product":
         item_options = ["All Products"] + product_list
@@ -218,6 +212,12 @@ with st.sidebar:
         fallback_all_label = "All Categories"
         
     selected_item = st.selectbox("", item_options, index=0, label_visibility="collapsed", key="ctl_item")
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    
+    # PILIHAN FILTER 3: Wilayah Kerja (Region)
+    st.markdown("<div class='sidebar-label'>Filter Wilayah (Region)</div>", unsafe_allow_html=True)
+    region_options = ["All Regions"] + region_list
+    selected_region = st.selectbox("", region_options, index=0, label_visibility="collapsed", key="ctl_region")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
     # PILIHAN FILTER 4: Granularitas Waktu atau Interval Agregasi Data Deret Waktu
