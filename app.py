@@ -122,7 +122,7 @@ product_list = sorted(list(dataset_raw['Product Name'].unique()))
 # 04. USER INTERFACE CONTROLS (SIDEBAR PANEL)
 # ==============================================================================
 with st.sidebar:
-    st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 1.7rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Dashboard Controls</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 1.7rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Control Panel</h2>", unsafe_allow_html=True)
     
     st.markdown("<div class='sidebar-label'>Product Name Filter</div>", unsafe_allow_html=True)
     product_options = ["All Products"] + product_list
