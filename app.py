@@ -107,7 +107,7 @@ st.markdown("""
             width: 14px;
             height: 4px;
             border-radius: 2px;
-            margin-right: 8px;
+            margin-right: 5px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -482,7 +482,7 @@ if selected_item != fallback_all_label:
     <div style='text-align: left; line-height: 1.2;'>
         <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics ({prediction_basis} | Scope: {selected_region})</div>
         <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>{selected_item}</div>
-        <div style='font-size: 0.75rem; color: #B0B0B0;'>{selected_period} using <span style='color: #00FFA6; font-weight: 600;'>{selected_method}</span></div>
+        <div style='font-size: 0.75rem; color: #B0B0B0; margin-top: 0.3rem;'>{selected_period} using <span style='color: #00FFA6; font-weight: 600;'>{selected_method}</span></div>
     </div>
     """
     
@@ -491,7 +491,7 @@ if selected_item != fallback_all_label:
     <div style='text-align: right; line-height: 1.3;'>
         <div style='font-size: 0.85rem; color: #E0E0E0; font-weight: 500;'>Forecast for {periode_label}</div>
         <div style='font-size: 1.5rem; font-weight: 700; color: #FFFFFF; margin: 1px 0;'>{predicted_value:,} Qty</div>
-        <div style='font-size: 0.72rem; color: #B0B0B0;'>
+        <div style='font-size: 0.72rem; color: #B0B0B0; margin-top: 0.3rem;'>
             <span style='color: #FFFFFF; font-weight: 600;'>[Accuracy Score]</span> 
             WMAPE: <span style='color: #00FFA6; font-weight: 600;'>{accuracy_score:.1f}%</span><br/>
             MAE: <span style='color: #FFB300; font-weight: 600;'>&plusmn; {mae_val:.0f} qty</span> | 
@@ -561,7 +561,7 @@ else:
     <div style='text-align: left; line-height: 1.2;'>
         <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics (Scope: {selected_region})</div>
         <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>{selected_item}</div>
-        <div style='font-size: 0.75rem; color: #B0B0B0;'>Data Source: <span style='color: #00FFA6; font-weight: 600;'>dataset.csv</span></div>
+        <div style='font-size: 0.75rem; color: #B0B0B0; margin-top: 0.3rem;'>Data Source: <span style='color: #00FFA6; font-weight: 600;'>dataset.csv</span></div>
     </div>
     """
     html_info_box = "" # Mengosongkan boks info metrik akurasi karena tidak ada pemodelan yang dieksekusi
@@ -609,7 +609,7 @@ else:
     }
     
     # Penyusunan komponen legenda melingkar kustom untuk mewakili identitas puluhan item sekaligus
-    html_custom_legend = "<div class='custom-legend-container' style='flex-wrap: wrap; max-width: 80%; margin: 0 auto; gap: 15px;'>"
+    html_custom_legend = "<div class='custom-legend-container' style='flex-wrap: wrap; max-width: 80%; margin: 0 auto; gap: 10px;'>"
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
     for i, item in enumerate(loop_items):
         c = colors[i % len(colors)]
