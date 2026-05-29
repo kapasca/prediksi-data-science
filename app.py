@@ -329,8 +329,12 @@ if selected_item != fallback_all_label:
     # PENJELASAN DATA SCIENCE (Handling Missing Timesteps): 
     # Transaksi e-commerce bersifat intermiten (tidak terjadi setiap hari). Kita harus membuat linimasa waktu yang utuh 
     # tanpa ada hari/bulan yang bolong dari tanggal awal hingga akhir, kemudian menjumlahkan kuantitas penjualan (SUM).
-    full_timeline = pd.date_range(start=dataset_filtered['Order Date'].min(), end=dataset_filtered['Order Date'].max(), freq=freq_code)
+    start_date = dataset_filtered['Order Date'].min()
+    end_date = dataset_filtered['Order Date'].max()
+    
     df_interim = dataset_filtered.resample(freq_code, on='Order Date')['Quantity'].sum()
+    actual_end = max(end_date, df_interim.index.max())
+    full_timeline = pd.date_range(start=start_date, end=actual_end, freq=freq_code)
     
     # Mengisi kekosongan periode dengan nilai 0 (asumsi tidak ada penjualan) agar pola temporal tidak rusak saat dipelajari model
     dataset_resampled = df_interim.reindex(full_timeline, fill_value=0).to_frame()
@@ -452,14 +456,21 @@ if selected_item != fallback_all_label:
         # Pola pikir: Model statistik penanggalan waktu yang memberikan bobot lebih berat pada data terbaru dibandingkan data masa lampau.
         elif selected_method == "Exponential Smoothing":
             try:
-                model_evaluator = ExponentialSmoothing(y_train, initialization_method="estimated").fit()
-                y_pred_test = model_evaluator.forecast(len(y_test))
-                y_pred_test = np.maximum(0, y_pred_test.astype(int))
+                # Gunakan strategi rolling yang sama agar grafik bergelombang dinamis
+                history = list(y_train)
+                es_preds = []
+                
+                for idx in range(len(y_test)):
+                    model_temp = ExponentialSmoothing(history, initialization_method="estimated").fit()
+                    pred_one_step = model_temp.forecast(1)
+                    es_preds.append(pred_one_step[0])
+                    history.append(y_test[idx])
+                    
+                y_pred_test = np.maximum(0, np.array(es_preds).astype(int))
                 
                 model_final = ExponentialSmoothing(y_target, initialization_method="estimated").fit()
                 predicted_value = max(0, int(model_final.forecast(1)[0]))
             except:
-                # Mekanisme pertahanan (Fallback) jika matriks perhitungan matematika mendeteksi singularitas atau kegagalan konvergensi
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
                 predicted_value = int(np.mean(y_target[-2:])) if len(y_target) >= 2 else 0
 
@@ -471,7 +482,7 @@ if selected_item != fallback_all_label:
             df_train = df_prophet.iloc[:split_index]
             
             try:
-                m_eval = Prophet(yearly_seasonality=False, weekly_seasonality=False, daily_seasonality=False)
+                m_eval = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
                 m_eval.fit(df_train)
                 
                 future_eval = m_eval.make_future_dataframe(periods=len(y_test), freq=freq_code)
@@ -479,7 +490,7 @@ if selected_item != fallback_all_label:
                 y_pred_test = forecast_eval['yhat'].iloc[split_index:].values
                 y_pred_test = np.maximum(0, y_pred_test.astype(int))
                 
-                m_final = Prophet(yearly_seasonality=False, weekly_seasonality=False, daily_seasonality=False)
+                m_final = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
                 m_final.fit(df_prophet)
                 future_final = m_final.make_future_dataframe(periods=1, freq=freq_code)
                 forecast_final = m_final.predict(future_final)
@@ -491,33 +502,42 @@ if selected_item != fallback_all_label:
         # --- ALGORITMA 6: ARIMA (Autoregressive Integrated Moving Average) ---
         # Pola pikir: Model statistik klasik yang menggabungkan komponen Autoregressive (AR), Differencing (I), dan Moving Average (MA) untuk menangkap pola temporal.
         elif selected_method == "ARIMA":
-            # Menyiapkan data latih dan target dalam bentuk Pandas Series berindeks tanggal asli
             series_train = pd.Series(y_train, index=original_datetime_index[:split_index])
-            series_target = pd.DataFrame(y_target, index=original_datetime_index)
+            series_target = pd.Series(y_target, index=original_datetime_index)
             
-            # Memastikan frekuensi indeks terdefinisi dengan baik agar ARIMA tidak mengeluarkan peringatan (warning)
             series_train.index.freq = freq_code
             series_target.index.freq = freq_code
             
             try:
-                # 1. Tahap Evaluasi: Melatih model pada 80% data untuk memprediksi sisa 20% data uji
-                model_evaluator = ARIMA(series_train, order=(1, 1, 1))
-                model_eval_fitted = model_evaluator.fit()
+                # REKAYASA ROLLING EVALUATION AGAR GRAFIK TESTING TIDAK LURUS FLAT
+                history = list(y_train)
+                arima_preds = []
                 
-                # Memprediksi rentang indeks data uji
-                y_pred_test = model_eval_fitted.predict(start=len(y_train), end=len(y_train) + len(y_test) - 1)
-                y_pred_test = np.maximum(0, y_pred_test.astype(int)).values # Konversi ke numpy array murni
+                # Prediksi satu per satu melintasi data uji
+                for idx in range(len(y_test)):
+                    current_series = pd.Series(history, index=original_datetime_index[:split_index+idx])
+                    current_series.index.freq = freq_code
+                    
+                    # Latih model dengan histori yang terus bertambah
+                    model_temp = ARIMA(current_series, order=(1, 1, 1))
+                    model_temp_fitted = model_temp.fit()
+                    
+                    # Ramal 1 langkah ke depan
+                    pred_one_step = model_temp_fitted.forecast(steps=1)
+                    arima_preds.append(pred_one_step.iloc[0])
+                    
+                    # Masukkan data aktual uji ke histori untuk modal prediksi bulan berikutnya
+                    history.append(y_test[idx])
                 
-                # 2. Tahap Produksi: Menggunakan 100% data penuh untuk memproyeksikan penjualan di masa depan
+                y_pred_test = np.maximum(0, np.array(arima_preds).astype(int))
+                
+                # 2. Tahap Produksi (Tetap Ramal Masa Depan)
                 model_final = ARIMA(series_target, order=(1, 1, 1))
                 model_final_fitted = model_final.fit()
-                
-                # Melakukan peramalan 1 langkah (periode) ke depan
                 future_forecast = model_final_fitted.forecast(steps=1)
                 predicted_value = max(0, int(future_forecast.iloc[0]))
                 
             except:
-                # Mekanisme pertahanan (Fallback) jika data tidak stasioner atau gagal konvergen
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
                 predicted_value = int(np.mean(y_target[-2:])) if len(y_target) >= 2 else 0
 
@@ -568,8 +588,8 @@ if selected_item != fallback_all_label:
         <div style='font-size: 0.72rem; color: #B0B0B0; margin-top: 0.3rem;'>
             <span style='color: #FFFFFF; font-weight: 600;'>[Accuracy Score]</span> 
             WMAPE: <span style='color: #00FFA6; font-weight: 600;'>{accuracy_score:.1f}%</span><br/>
-            MAE: <span style='color: #FFB300; font-weight: 600;'>&plusmn; {mae_val:.0f} qty</span> | 
-            RMSE: <span style='color: #FF6B6B; font-weight: 600;'>&plusmn; {rmse_val:.0f} qty</span>
+            MAE: <span style='color: #FFB300; font-weight: 600;'>± {mae_val:.0f} qty</span> | 
+            RMSE: <span style='color: #FF6B6B; font-weight: 600;'>± {rmse_val:.0f} qty</span>
         </div>
     </div>
     """
