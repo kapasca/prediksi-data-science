@@ -15,16 +15,14 @@ logging.getLogger('prophet').setLevel(logging.ERROR)
 logging.getLogger('cmdstanpy').setLevel(logging.ERROR)
 warnings.filterwarnings("ignore")
 
-# ==============================================================================
+# ====================================================================================================================
 # 01. KONFIGURASI APLIKASI & METADATA HALAMAN WEB
-# ==============================================================================
-# Mengatur tata letak halaman menjadi mode lebar (wide) dan menentukan judul aplikasi pada tab peramban
+# ====================================================================================================================
 st.set_page_config(layout="wide", page_title="E-Commerce Sales Predictions", initial_sidebar_state="expanded")
 
-# ==============================================================================
+# ====================================================================================================================
 # 02. ARSITEKTUR VISUAL & INJEKSI CUSTOM CSS
-# ==============================================================================
-# Menyuntikkan kode CSS kustom untuk memodifikasi elemen bawaan Streamlit demi estetika dan responsivitas antarmuka
+# ====================================================================================================================
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
@@ -113,9 +111,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ==============================================================================
+# ====================================================================================================================
 # 03. PIPELINE DATA - FASE 1: INGESTI DATA & PEMBERSIHAN DATA (DATA CLEANING)
-# ==============================================================================
+# ====================================================================================================================
 @st.cache_data
 def load_raw_data():
     """
@@ -154,9 +152,9 @@ product_list = sorted(list(dataset_raw['Product Name'].unique()))
 category_list = sorted(list(dataset_raw['Category'].unique())) if 'Category' in dataset_raw.columns else []
 region_list = sorted(list(dataset_raw['Region'].unique())) if 'Region' in dataset_raw.columns else []
 
-# ==============================================================================
+# ====================================================================================================================
 # 04. SUB-RUTIN: MODAL PREVIEW DATASET MENTAH
-# ==============================================================================
+# ====================================================================================================================
 @st.dialog("Data Preview", width="large")
 def show_dataset_preview_modal():
     """
@@ -230,9 +228,9 @@ def show_dataset_preview_modal():
     if st.button("Close Preview", key="btn_close_dataset", use_container_width=True):
         st.rerun()
 
-# ==============================================================================
+# ====================================================================================================================
 # 05. KONTROL ANTARMUKA PENGGUNA (SIDEBAR PANEL)
-# ==============================================================================
+# ====================================================================================================================
 with st.sidebar:
     st.markdown("<h2 style='font-size: 1.3rem; font-weight: 900; color: #edae3e; margin-top: -1.6rem; margin-bottom: 2.5rem; background-color: #0e1117; text-align: center; border-radius: 10px;'>Control Panel</h2>", unsafe_allow_html=True)
     
@@ -299,9 +297,9 @@ st.write("---")
 # Membuat kontainer dinamis (placeholder) kosong yang nantinya akan diisi oleh komponen visualisasi grafik
 placeholder_chart = st.empty()
 
-# ==============================================================================
+# ====================================================================================================================
 # FASE UPSTREAM FILTERING: KETERLIBATAN WILAYAH (REGION) DALAM PIPELINE DATA SCIENCE
-# ==============================================================================
+# ====================================================================================================================
 # PENJELASAN DATA SCIENCE: Agar model cerdas dan peka terhadap dinamika lokal (Granular Forecasting),
 # data dipotong berdasarkan Region di hulu SEBELUM proses penyusunan ulang struktur data (resampling).
 # Hal ini memastikan fase pelatihan (training) model benar-benar murni mempelajari pola transaksi dari wilayah tersebut.
@@ -310,14 +308,14 @@ if selected_region != "All Regions":
 else:
     dataset_working = dataset_raw.copy()
 
-# ==============================================================================
+# ====================================================================================================================
 # 06. PIPELINE DATA - FASE 2: PEMROSESAN & PERAMALAN MODEL (MODE ITEM TUNGGAL)
-# ==============================================================================
+# ====================================================================================================================
 if selected_item != fallback_all_label:
     
-    # --------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------
     # SUB-FASE A: PENYUSUNAN ULANG STRUKTUR DERET WAKTU & RE-INDEXING
-    # --------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------
     # Menyaring data berdasarkan item spesifik yang dipilih oleh pengguna
     dataset_filtered = dataset_working[dataset_working[target_column] == selected_item]
     
@@ -384,9 +382,9 @@ if selected_item != fallback_all_label:
     y_eval_preds = np.full(len(dataset_resampled), np.nan, dtype=float)
     y_pred_test = np.zeros(len(y_test))
     
-    # --------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------
     # SUB-FASE B: INTI MESIN PROSES PEMODELAN ML & FORECASTING STATISTIK (100% VALID)
-    # --------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------
     if len(dataset_resampled) >= 2:
         
         # --- ALGORITMA 1: LINEAR REGRESSION (Regresi Linear) ---
@@ -563,9 +561,9 @@ if selected_item != fallback_all_label:
         # 3. RMSE (Root Mean Squared Error): Kembaran MAE namun memberikan hukuman (penalti) kuadrat jauh lebih berat pada kesalahan tebakan yang fatal.
         rmse_val = np.sqrt(mean_squared_error(y_test, y_pred_test))
 
-    # --------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------
     # SUB-FASE C: FORMALISASI KPI METRIK & PENGEPAKAN DATAFRAME UNTUK GRAFIK
-    # --------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------
     # Menghitung skor akurasi teoritis berbasis 100 dikurangi persentase galat WMAPE
     accuracy_score = max(0.0, 100.0 - mape_error)
     
@@ -650,9 +648,9 @@ if selected_item != fallback_all_label:
     """
 
 else:
-    # ==============================================================================
+    # ====================================================================================================================
     # 07. PIPELINE DATA - MODE MULTI ITEM / SEMUA ITEM (FALLBACK MULTI LINE CHART)
-    # ==============================================================================
+    # ====================================================================================================================
     # PENJELASAN LOGIKA APLIKASI: Jika pengguna memilih opsi "All Products" atau "All Categories", 
     # aplikasi tidak menjalankan proses latih model karena beban komputasi akan meledak secara berlebihan. 
     # Sebagai gantinya, aplikasi menampilkan grafik komparasi pertumbuhan volume antar item secara langsung.
@@ -715,9 +713,9 @@ else:
         html_custom_legend += f"<div class='legend-item'><div class='legend-color-box' style='background-color: {c}; height: 10px; width: 10px; border-radius: 50%;'></div>{item}</div>"
     html_custom_legend += "</div>"
 
-# ==============================================================================
+# ====================================================================================================================
 # 08. INJEKSI KONTEN DINAMIS & EKSEKUSI RENDERING GRAFIK MESIN VEGA-LITE
-# ==============================================================================
+# ====================================================================================================================
 with placeholder_chart.container():
     # Membuat struktur baris atas berisi judul informasi di kiri dan skor akurasi di kanan
     col_title, col_info = st.columns([1, 1])
