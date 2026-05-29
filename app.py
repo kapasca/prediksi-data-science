@@ -157,34 +157,74 @@ region_list = sorted(list(dataset_raw['Region'].unique())) if 'Region' in datase
 # ==============================================================================
 # 04. SUB-RUTIN: MODAL PREVIEW DATASET MENTAH
 # ==============================================================================
-@st.dialog("RAW Dataset Preview", width="large")
+@st.dialog("Data Preview", width="large")
 def show_dataset_preview_modal():
     """
     Fungsi sub-rutin untuk menampilkan jendela pop-up (modal) yang menyajikan
     ringkasan statistik serta cuplikan data mentah kepada pengguna.
     """
-    st.markdown("<h3 style='color: #edae3e; text-align: center; margin-top: -1.5rem;'>RAW Dataset Preview</h3>", unsafe_allow_html=True)
-    st.markdown("---")
+    
+    st.markdown("<h2 style='font-size: 1.8rem; font-weight: 900; color: #edae3e; margin-bottom: 0; text-align: center;'>E-Commerce Sales Dataset</h2>", unsafe_allow_html=True)
+    st.write("---")
     
     # Menampilkan metrik utama volume data menggunakan tata letak tiga kolom
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("Total Rows", len(dataset_raw))
     with col2:
         st.metric("Total Columns", len(dataset_raw.columns))
     with col3:
         st.metric("Unique Products", len(product_list))
+    with col4:
+        st.metric("Unique Categories", len(category_list))
+    with col5:
+        st.metric("Unique Regions", len(region_list))
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        oldest_date = dataset_raw['Order Date'].min().strftime('%Y-%m-%d')
+        newest_date = dataset_raw['Order Date'].max().strftime('%Y-%m-%d')
+        avg_quantity_per_transaction = dataset_raw['Quantity'].mean()
+        avg_sales_per_transaction = dataset_raw['Sales'].mean() if 'Sales' in dataset_raw.columns else "N/A"
+        avg_profit_per_transaction = dataset_raw['Profit'].mean() if 'Profit' in dataset_raw.columns else "N/A"
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Oldest Date<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{oldest_date}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Newest Date<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{newest_date}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Average Quantity<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{avg_quantity_per_transaction:.2f}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Average Sales<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{avg_sales_per_transaction:.2f}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Average Profit<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{avg_profit_per_transaction:.2f}</div></div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown("<div style='font-size: 0.75rem; color: #edae3e;'>List of Attributes</div>", unsafe_allow_html=True)
+        column_names_html = "<div style='display: flex; flex-direction: column; margin-top: 0.5rem; gap: 5px;'>"
+        for col in dataset_raw.columns:
+            column_names_html += f"<div style='background-color: #2A2A2A; padding: 5px 10px; border-radius: 5px; font-size: 0.75rem;'>{col}</div>"
+        column_names_html += "</div>"
+        st.markdown(column_names_html, unsafe_allow_html=True)
+    with col3:
+        st.markdown("<div style='font-size: 0.75rem; color: #edae3e;'>List of Products</div>", unsafe_allow_html=True)
+        products_html = "<div style='display: flex; flex-direction: column; margin-top: 0.5rem; gap: 5px;'>"
+        for product in product_list:
+            products_html += f"<div style='background-color: #2A2A2A; padding: 5px 10px; border-radius: 5px; font-size: 0.75rem;'>{product}</div>"
+        products_html += "</div>"
+        st.markdown(products_html, unsafe_allow_html=True)
+    with col4:
+        st.markdown("<div style='font-size: 0.75rem; color: #edae3e;'>List of Categories</div>", unsafe_allow_html=True)
+        categories_html = "<div style='display: flex; flex-direction: column; margin-top: 0.5rem; gap: 5px;'>"
+        for category in category_list:
+            categories_html += f"<div style='background-color: #2A2A2A; padding: 5px 10px; border-radius: 5px; font-size: 0.75rem;'>{category}</div>"
+        categories_html += "</div>"
+        st.markdown(categories_html, unsafe_allow_html=True)
+    with col5:
+        st.markdown("<div style='font-size: 0.75rem; color: #edae3e;'>List of Regions</div>", unsafe_allow_html=True)
+        regions_html = "<div style='display: flex; flex-direction: column; margin-top: 0.5rem; gap: 5px;'>"
+        for region in region_list:
+            regions_html += f"<div style='background-color: #2A2A2A; padding: 5px 10px; border-radius: 5px; font-size: 0.75rem;'>{region}</div>"
+        regions_html += "</div>"
+        st.markdown(regions_html, unsafe_allow_html=True)
     
     st.markdown("")
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Column Names:</b></div>", unsafe_allow_html=True)
-    st.write(dataset_raw.columns.tolist())
-    
-    st.markdown("")
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.85rem; margin: 1rem 0;'><b>Descriptive Statistics Summary:</b></div>", unsafe_allow_html=True)
-    st.dataframe(dataset_raw.describe(), use_container_width=True)
-    
-    st.markdown("<div style='color: #B0B0B0; font-size: 0.9rem; margin: 1rem 0;'><b>Data Preview (First 50 Rows):</b></div>", unsafe_allow_html=True)
-    st.dataframe(dataset_raw.head(50), use_container_width=True, height=350)
+    st.markdown("---")
+    st.markdown("<div style='color: #cecece; font-weight: 300; font-size: 1.2rem; margin: 1rem 0;'><span style='color: #edae3e; font-weight: bold;'>Review All Data</span> (RAW Dataset)</div>", unsafe_allow_html=True)
+    st.dataframe(dataset_raw, use_container_width=True, height=350)    
     
     st.markdown("---")
     if st.button("Close Preview", key="btn_close_dataset", use_container_width=True):
