@@ -15,14 +15,14 @@ logging.getLogger('prophet').setLevel(logging.ERROR)
 logging.getLogger('cmdstanpy').setLevel(logging.ERROR)
 warnings.filterwarnings("ignore")
 
-# ==============================================================================
-# 01. KONFIGURASI APLIKASI & METADATA HALAMAN
-# ==============================================================================
+# ====================================================================================================================
+# 01. KONFIGURASI APLIKASI & METADATA HALAMAN WEB
+# ====================================================================================================================
 st.set_page_config(layout="wide", page_title="E-Commerce Sales Predictions", initial_sidebar_state="expanded")
 
-# ==============================================================================
+# ====================================================================================================================
 # 02. ARSITEKTUR VISUAL & INJEKSI CUSTOM CSS
-# ==============================================================================
+# ====================================================================================================================
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
@@ -73,11 +73,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ==============================================================================
-# 03. LOGIKA BACKEND: PEMUATAN DATA & CACHING
-# ==============================================================================
-@st.cache_data(show_spinner=False)
-def load_and_preprocess_dataset():
+# ====================================================================================================================
+# 03. PIPELINE DATA - FASE 1: INGESTI DATA & PEMBERSIHAN DATA (DATA CLEANING)
+# ====================================================================================================================
+@st.cache_data
+def load_raw_data():
     """
     Memuat dataset dari berkas CSV lokal dan melakukan konversi tipe data esensial.
     Returns:
@@ -100,9 +100,90 @@ if raw_dataset.empty:
     st.warning("Aplikasi tidak dapat dilanjutkan karena dataset kosong atau tidak ditemukan berkas 'dataset.csv'.")
     st.stop()
 
-# ==============================================================================
-# 04. PANEL KONTROL (SIDEBAR INTERFACE)
-# ==============================================================================
+# Mengekstraksi daftar unik dari dataset untuk mengisi opsi pada komponen dropdown antarmuka pengguna
+product_list = sorted(list(dataset_raw['Product Name'].unique()))
+category_list = sorted(list(dataset_raw['Category'].unique())) if 'Category' in dataset_raw.columns else []
+region_list = sorted(list(dataset_raw['Region'].unique())) if 'Region' in dataset_raw.columns else []
+
+# ====================================================================================================================
+# 04. SUB-RUTIN: MODAL PREVIEW DATASET MENTAH
+# ====================================================================================================================
+@st.dialog("Data Preview", width="large")
+def show_dataset_preview_modal():
+    """
+    Fungsi sub-rutin untuk menampilkan jendela pop-up (modal) yang menyajikan
+    ringkasan statistik serta cuplikan data mentah kepada pengguna.
+    """
+    
+    st.markdown("<h2 style='font-size: 1.8rem; font-weight: 900; color: #edae3e; margin-bottom: 0; text-align: center;'>E-Commerce Sales Dataset</h2>", unsafe_allow_html=True)
+    st.write("---")
+    
+    # Menampilkan metrik utama volume data menggunakan tata letak tiga kolom
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("Total Rows", len(dataset_raw))
+    with col2:
+        st.metric("Total Columns", len(dataset_raw.columns))
+    with col3:
+        st.metric("Unique Products", len(product_list))
+    with col4:
+        st.metric("Unique Categories", len(category_list))
+    with col5:
+        st.metric("Unique Regions", len(region_list))
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        oldest_date = dataset_raw['Order Date'].min().strftime('%Y-%m-%d')
+        newest_date = dataset_raw['Order Date'].max().strftime('%Y-%m-%d')
+        avg_quantity_per_transaction = dataset_raw['Quantity'].mean()
+        avg_sales_per_transaction = dataset_raw['Sales'].mean() if 'Sales' in dataset_raw.columns else "N/A"
+        avg_profit_per_transaction = dataset_raw['Profit'].mean() if 'Profit' in dataset_raw.columns else "N/A"
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Oldest Date<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{oldest_date}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Newest Date<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{newest_date}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Average Quantity<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{avg_quantity_per_transaction:.2f}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Average Sales<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{avg_sales_per_transaction:.2f}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size: 0.75rem; color: #edae3e; margin-bottom: 0.5rem;'>Average Profit<div style='font-size: 0.875rem; font-weight: bold; color: #fff;'>{avg_profit_per_transaction:.2f}</div></div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown("<div style='font-size: 0.75rem; color: #edae3e;'>List of Attributes</div>", unsafe_allow_html=True)
+        column_names_html = "<div style='display: flex; flex-direction: column; margin-top: 0.5rem; gap: 5px;'>"
+        for col in dataset_raw.columns:
+            column_names_html += f"<div style='background-color: #2A2A2A; padding: 5px 10px; border-radius: 5px; font-size: 0.75rem;'>{col}</div>"
+        column_names_html += "</div>"
+        st.markdown(column_names_html, unsafe_allow_html=True)
+    with col3:
+        st.markdown("<div style='font-size: 0.75rem; color: #edae3e;'>List of Products</div>", unsafe_allow_html=True)
+        products_html = "<div style='display: flex; flex-direction: column; margin-top: 0.5rem; gap: 5px;'>"
+        for product in product_list:
+            products_html += f"<div style='background-color: #2A2A2A; padding: 5px 10px; border-radius: 5px; font-size: 0.75rem;'>{product}</div>"
+        products_html += "</div>"
+        st.markdown(products_html, unsafe_allow_html=True)
+    with col4:
+        st.markdown("<div style='font-size: 0.75rem; color: #edae3e;'>List of Categories</div>", unsafe_allow_html=True)
+        categories_html = "<div style='display: flex; flex-direction: column; margin-top: 0.5rem; gap: 5px;'>"
+        for category in category_list:
+            categories_html += f"<div style='background-color: #2A2A2A; padding: 5px 10px; border-radius: 5px; font-size: 0.75rem;'>{category}</div>"
+        categories_html += "</div>"
+        st.markdown(categories_html, unsafe_allow_html=True)
+    with col5:
+        st.markdown("<div style='font-size: 0.75rem; color: #edae3e;'>List of Regions</div>", unsafe_allow_html=True)
+        regions_html = "<div style='display: flex; flex-direction: column; margin-top: 0.5rem; gap: 5px;'>"
+        for region in region_list:
+            regions_html += f"<div style='background-color: #2A2A2A; padding: 5px 10px; border-radius: 5px; font-size: 0.75rem;'>{region}</div>"
+        regions_html += "</div>"
+        st.markdown(regions_html, unsafe_allow_html=True)
+    
+    st.markdown("")
+    st.markdown("---")
+    st.markdown("<div style='color: #cecece; font-weight: 300; font-size: 1.2rem; margin: 1rem 0;'><span style='color: #edae3e; font-weight: bold;'>Review All Data</span> (RAW Dataset)</div>", unsafe_allow_html=True)
+    st.dataframe(dataset_raw, use_container_width=True, height=350)    
+    
+    st.markdown("---")
+    if st.button("Close Preview", key="btn_close_dataset", use_container_width=True):
+        st.rerun()
+
+# ====================================================================================================================
+# 05. KONTROL ANTARMUKA PENGGUNA (SIDEBAR PANEL)
+# ====================================================================================================================
 with st.sidebar:
     st.markdown("<h2 style='margin-top:0; color:#00E5FF;'>🎛️ Control Panel</h2>", unsafe_allow_html=True)
     st.write("Atur parameter analisis dan pemodelan prediksi di bawah ini:")
@@ -146,27 +227,31 @@ with st.sidebar:
     display_range_options = ["All Data", "Last 80% Data", "Last 50% Data", "Last 20% Data"]
     selected_range = st.radio("Rentang Tampilan Data", display_range_options, index=0)
 
-# ==============================================================================
-# 05. ENGINERING HUB: FILTERING & RESAMPLING DATA TIME SERIES
-# ==============================================================================
-# Tahap 1: Penyaringan data berdasarkan Region
+# ====================================================================================================================
+# FASE UPSTREAM FILTERING: KETERLIBATAN WILAYAH (REGION) DALAM PIPELINE DATA SCIENCE
+# ====================================================================================================================
+# PENJELASAN DATA SCIENCE: Agar model cerdas dan peka terhadap dinamika lokal (Granular Forecasting),
+# data dipotong berdasarkan Region di hulu SEBELUM proses penyusunan ulang struktur data (resampling).
+# Hal ini memastikan fase pelatihan (training) model benar-benar murni mempelajari pola transaksi dari wilayah tersebut.
 if selected_region != "All Regions":
     dataset_filtered = raw_dataset[raw_dataset['Region'] == selected_region]
 else:
     dataset_filtered = raw_dataset.copy()
 
-# Cek kondisi aktivasi Mode Fallback (Multi-Item)
-is_fallback_mode = False
-if (forecasting_basis == "By Product Name" and selected_item == "All Products") or \
-   (forecasting_basis == "By Category" and selected_item == "All Categories"):
-    is_fallback_mode = True
-
-# Proses berlanjut jika pengguna memilih item tunggal secara spesifik
-if not is_fallback_mode:
-    dataset_filtered = dataset_filtered[dataset_filtered[target_column] == selected_item]
+# ====================================================================================================================
+# 06. PIPELINE DATA - FASE 2: PEMROSESAN & PERAMALAN MODEL (MODE ITEM TUNGGAL)
+# ====================================================================================================================
+if selected_item != fallback_all_label:
     
-    if dataset_filtered.empty:
-        st.info("Tidak ada transaksi untuk kombinasi filter yang Anda pilih.")
+    # ----------------------------------------------------------------------------------------------------------------
+    # SUB-FASE A: PENYUSUNAN ULANG STRUKTUR DERET WAKTU & RE-INDEXING
+    # ----------------------------------------------------------------------------------------------------------------
+    # Menyaring data berdasarkan item spesifik yang dipilih oleh pengguna
+    dataset_filtered = dataset_working[dataset_working[target_column] == selected_item]
+    
+    # Antisipasi jika pada kombinasi wilayah dan item tersebut tidak ditemukan jejak transaksi historis sama sekali
+    if len(dataset_filtered) == 0:
+        st.warning(f"No historical data found for {selected_item} in Region: {selected_region}")
         st.stop()
         
     # Urutkan kronologi berdasarkan tanggal transaksi
@@ -204,15 +289,19 @@ if not is_fallback_mode:
         
     X_train, X_test = X_features[:split_index], X_features[split_index:]
     y_train, y_test = y_target[:split_index], y_target[split_index:]
-
-# ==============================================================================
-# 06. CORE ENGINE: MATEMATIKA MODEL & EXECUTION FORECAST
-# ==============================================================================
-predicted_value = 0
-y_pred_test = np.array([])
-
-if not is_fallback_mode:
-    # Validasi batas minimum baris data untuk melakukan pemodelan statistik
+    
+    # Inisialisasi variabel penampung nilai metrik performa
+    predicted_value = 0
+    mape_error = 0
+    mae_val = 0
+    rmse_val = 0
+    
+    y_eval_preds = np.full(len(dataset_resampled), np.nan, dtype=float)
+    y_pred_test = np.zeros(len(y_test))
+    
+    # ----------------------------------------------------------------------------------------------------------------
+    # SUB-FASE B: INTI MESIN PROSES PEMODELAN ML & FORECASTING STATISTIK (100% VALID)
+    # ----------------------------------------------------------------------------------------------------------------
     if len(dataset_resampled) >= 2:
         
         # --- ALGORITMA 1: LINEAR REGRESSION ---
@@ -381,18 +470,14 @@ if not is_fallback_mode:
         mae_val = mean_absolute_error(y_test, y_pred_test)
         rmse_val = np.sqrt(mean_squared_error(y_test, y_pred_test))
 
-# ==============================================================================
-# 08. LAYOUT DASHBOARD & VISUALISASI UTAMA
-# ==============================================================================
-# Judul Aplikasi pada Header Dashboard Utama
-st.markdown("<h1 style='margin-top: 0; margin-bottom: 5px; font-weight: 800; color: #FFFFFF;'>📊 E-Commerce Sales Forecasting Dashboard</h1>", unsafe_allow_html=True)
-st.markdown(f"<p style='color: #8A99AD; font-size:15px; margin-bottom:25px;'>Sistem proyeksi analitik prediktif penjualan. Filter Aktif: <span style='color:#00E5FF; font-weight:600;'>{selected_region}</span></p>", unsafe_allow_html=True)
-
-# KONDISI A: TAMPILAN DASHBOARD UTAMA (MODE ITEM TUNGGAL)
-if not is_fallback_mode:
-    # Mengonversi format indeks penanggalan untuk keperluan visualisasi grafik sumbu X
-    if selected_period == "Weekly":
-        chart_string_labels = original_datetime_index.strftime('%Y-W%V').tolist()
+    # ----------------------------------------------------------------------------------------------------------------
+    # SUB-FASE C: FORMALISASI KPI METRIK & PENGEPAKAN DATAFRAME UNTUK GRAFIK
+    # ----------------------------------------------------------------------------------------------------------------
+    # Menghitung skor akurasi teoritis berbasis 100 dikurangi persentase galat WMAPE
+    accuracy_score = max(0.0, 100.0 - mape_error)
+    
+    if selected_period == "Monthly":
+        periode_label = "Next Month"
     elif selected_period == "Quarterly":
         chart_string_labels = original_datetime_index.strftime('%Y-Q').tolist()
         # Modifikasi teks manual agar mencerminkan nomor kuartal yang akurat
@@ -431,7 +516,57 @@ if not is_fallback_mode:
     df_single_render.loc[last_historical_label, 'Forecast'] = y_target[-1]
     df_single_render.loc[future_date_string] = [np.nan, np.nan, predicted_value]
     
-    # Penentuan teks deskriptif penunjuk waktu periode masa depan pada Metric Card
+    # Memotong baris visualisasi jika pengguna meminta pembatasan persentase data (Show Data Filter)
+    if selected_range != "All Data":
+        pct = int(selected_range.replace("%", "")) / 100.0
+        keep_points = max(2, int(len(df_single_render) * pct))
+        df_single_render = df_single_render.iloc[-keep_points:]
+        
+    df_single_render = df_single_render.replace([np.inf, -np.inf], np.nan)
+    
+    # Melelehkan struktur dataframe (Melt Technique) dari format mendatar (Wide) menjadi memanjang ke bawah (Long)
+    # Ini merupakan standar format masukan mutlak agar library grafik Vega-Lite/Altair bisa membedakan warna garis.
+    df_melted = df_single_render.reset_index().rename(columns={'index': 'Date'}).melt('Date', var_name='Category', value_name='Amount')
+    
+    # Konfigurasi skema warna pembeda untuk masing-masing tipe kategori garis pada grafik tunggal
+    color_schema = {
+        "field": "Category", 
+        "type": "nominal", 
+        "scale": {"domain": ['Historical Sales', 'Model Evaluation [20%]', 'Forecast'], "range": ["#4A90E2", "#F5A623", "#FF4B4B"]},
+        "legend": None
+    }
+    
+    # Injeksi legenda penunjuk warna kustom berbasis elemen HTML div agar serasi dengan desain tema gelap aplikasi
+    html_custom_legend = """
+    <div class='custom-legend-container'>
+        <div class='legend-item'><div class='legend-color-box' style='background-color: #4A90E2;'></div>Historical Sales</div>
+        <div class='legend-item'><div class='legend-color-box' style='background-color: #F5A623;'></div>Model Evaluation [20%]</div>
+        <div class='legend-item'><div class='legend-color-box' style='background-color: #FF4B4B;'></div>Forecast</div>
+    </div>
+    """
+
+else:
+    # ====================================================================================================================
+    # 07. PIPELINE DATA - MODE MULTI ITEM / SEMUA ITEM (FALLBACK MULTI LINE CHART)
+    # ====================================================================================================================
+    # PENJELASAN LOGIKA APLIKASI: Jika pengguna memilih opsi "All Products" atau "All Categories", 
+    # aplikasi tidak menjalankan proses latih model karena beban komputasi akan meledak secara berlebihan. 
+    # Sebagai gantinya, aplikasi menampilkan grafik komparasi pertumbuhan volume antar item secara langsung.
+    html_title_box = f"""
+    <div style='text-align: left; line-height: 1.2;'>
+        <div style='font-size: 0.9rem; color: #E0E0E0; font-weight: 500;'>Sales Statistics (Scope: {selected_region})</div>
+        <div style='font-size: 1.6rem; font-weight: 700; color: #FFFFFF; margin: 2px 0;'>{selected_item}</div>
+        <div style='font-size: 0.75rem; color: #B0B0B0; margin-top: 0.3rem;'>Data Source: <span style='color: #00FFA6; font-weight: 600;'>dataset.csv</span></div>
+    </div>
+    """
+    html_info_box = "" # Mengosongkan boks info metrik akurasi karena tidak ada pemodelan yang dieksekusi
+    
+    if len(dataset_working) == 0:
+        st.warning(f"No historical transaction data available for this region selection: {selected_region}")
+        st.stop()
+        
+    # Mengompilasi linimasa global komparatif
+    global_timeline = dataset_working.resample(freq_code, on='Order Date')['Quantity'].sum().index
     if selected_period == "Weekly":
         future_period_info = f"Minggu Depan ({future_date_string})"
     elif selected_period == "Quarterly":
@@ -439,8 +574,12 @@ if not is_fallback_mode:
     else:
         future_period_info = f"Bulan Depan ({future_date_string})"
 
-    # Pembagian kolom tata letak: Komponen Nilai KPI Utama (Atas)
-    col_kpi_1, col_kpi_2, col_kpi_3 = st.columns([1.2, 1.2, 2.1])
+# ====================================================================================================================
+# 08. INJEKSI KONTEN DINAMIS & EKSEKUSI RENDERING GRAFIK MESIN VEGA-LITE
+# ====================================================================================================================
+with placeholder_chart.container():
+    # Membuat struktur baris atas berisi judul informasi di kiri dan skor akurasi di kanan
+    col_title, col_info = st.columns([1, 1])
     
     with col_kpi_1:
         st.markdown(f"""
