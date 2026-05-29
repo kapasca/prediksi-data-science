@@ -423,23 +423,41 @@ if selected_item != fallback_all_label:
         # --- ALGORITMA 3: XGBOOST (Extreme Gradient Boosting) ---
         # Pola pikir: Algoritma tingkat lanjut berbasis pohon keputusan (Decision Trees) yang belajar secara bertahap dari kesalahan sebelumnya.
         elif selected_method == "XGBoost":
-            # Proteksi jika sampel data terlalu sedikit, alihkan otomatis ke perhitungan rata-rata sederhana demi stabilitas aplikasi
             if len(dataset_resampled) < 5:
+                # Fallback aman jika data terlalu sedikit
                 rolling_window = min(3, len(y_train))
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
-                predicted_value = int(np.mean(y_target[-rolling_window:])) if len(y_target) >= rolling_window else 0
+                predicted_value = int(np.mean(y_target[-rolling_window:])) if len(y_target) >= 2 else 0
             else:
-                # Melakukan evaluasi internal pada data uji menggunakan struktur pohon keputusan
+                # 1. Tahap Evaluasi yang Valid (Recursive Forecasting)
                 model_evaluator = XGBRegressor(n_estimators=50, max_depth=3, random_state=42, learning_rate=0.1)
                 model_evaluator.fit(X_train, y_train)
-                y_pred_test = model_evaluator.predict(X_test)
-                y_pred_test = np.maximum(0, y_pred_test.astype(int))
                 
-                # Melakukan pelatihan final menggunakan seluruh spektrum data aktual yang tersedia
+                # Kita prediksi data uji secara rekursif satu per satu
+                y_pred_test_list = []
+                # Ambil nilai lag awal dari ujung data training
+                current_lag = y_train[-1] 
+                
+                for idx in range(len(y_test)):
+                    # Ambil baris fitur untuk data uji saat ini
+                    current_features = X_test[idx].copy()
+                    # Paksa fitur Lag_1 diisi oleh hasil prediksi kita sebelumnya (bukan nilai riil dataset)
+                    current_features[3] = current_lag 
+                    
+                    # Lakukan prediksi satu langkah
+                    pred_step = model_evaluator.predict(np.array([current_features]))[0]
+                    pred_step = max(0, int(pred_step))
+                    y_pred_test_list.append(pred_step)
+                    
+                    # Update nilai lag untuk iterasi berikutnya menggunakan hasil prediksi barusan
+                    current_lag = pred_step
+                
+                y_pred_test = np.array(y_pred_test_list)
+                
+                # 2. Tahap Produksi (Gunakan Data Penuh)
                 model_final = XGBRegressor(n_estimators=50, max_depth=3, random_state=42, learning_rate=0.1)
                 model_final.fit(X_features, y_target)
                 
-                # Mengalkulasi nilai tanggal fiktif di masa depan untuk mengonstruksi fitur penanggalan baru
                 last_date_parsed = original_datetime_index[-1]
                 if selected_period == "Monthly":
                     future_date_obj = last_date_parsed + pd.DateOffset(months=1)
@@ -448,7 +466,7 @@ if selected_item != fallback_all_label:
                 else:
                     future_date_obj = last_date_parsed + pd.Timedelta(weeks=1)
                 
-                # Menyusun array dimensi baru berisi informasi waktu masa depan untuk dilempar ke model XGBoost
+                # Fitur lag untuk masa depan murni diambil dari titik terakhir data aktual penuh
                 X_future_step = np.array([[len(dataset_resampled), future_date_obj.month, future_date_obj.year, y_target[-1]]])
                 predicted_value = max(0, int(model_final.predict(X_future_step)[0]))
 
