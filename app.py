@@ -268,7 +268,7 @@ with st.sidebar:
     
     # PILIHAN FILTER 5: Penentuan Algoritma Matematika / Machine Learning yang akan digunakan
     st.markdown("<div class='sidebar-label'>Machine Learning Algorithm</div>", unsafe_allow_html=True)
-    algorithm_options = ["Linear Regression", "Moving Average", "XGBoost", "Exponential Smoothing", "Prophet", "ARIMA"]
+    algorithm_options = ["XGBoost", "Prophet", "ARIMA", "Exponential Smoothing", "Linear Regression", "Moving Average"]
     selected_method = st.selectbox("", algorithm_options, index=0, label_visibility="collapsed", key="ctl_method")
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
     
