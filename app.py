@@ -385,80 +385,76 @@ if selected_item != fallback_all_label:
     y_pred_test = np.zeros(len(y_test))
     
     # --------------------------------------------------------------------------
-    # SUB-FASE B: INTI MESIN PROSES PEMODELAN ML & FORECASTING STATISTIK (100% VALID)
+    # SUB-FASE B: INTI MESIN PROSES PEMODELAN ML & FORECASTING STATISTIK
     # --------------------------------------------------------------------------
     if len(dataset_resampled) >= 2:
         
         # --- ALGORITMA 1: LINEAR REGRESSION (Regresi Linear) ---
+        # Pola pikir: Mencari garis lurus terbaik yang menghubungkan pergerakan waktu dengan volume penjualan.
         if selected_method == "Linear Regression":
-            # Evaluasi 20% data uji menggunakan fitur penanggalan murni (X_train/X_test tanpa fitur Lag)
-            # Catatan: Kita abaikan kolom Lag_1 (indeks ke-3) khusus untuk Regresi agar dia belajar pola kalender makro
-            X_train_lr = X_train[:, :3]
-            X_test_lr = X_test[:, :3]
-            
+            # Tahap Evaluasi: Melatih model pada 80% data untuk memprediksi sisa 20% data uji
             model_evaluator = LinearRegression()
-            model_evaluator.fit(X_train_lr, y_train)
-            y_pred_test = model_evaluator.predict(X_test_lr)
-            y_pred_test = np.maximum(0, y_pred_test.astype(int))
+            model_evaluator.fit(X_train, y_train)
+            y_pred_test = model_evaluator.predict(X_test)
+            y_pred_test = np.maximum(0, y_pred_test.astype(int)) # Nilai kuantitas barang tidak boleh bernilai negatif
             
-            # Produksi masa depan
+            # Tahap Produksi: Menggunakan 100% data penuh untuk memproyeksikan penjualan di masa depan
             model_final = LinearRegression()
-            X_features_lr = X_features[:, :3]
-            model_final.fit(X_features_lr, y_target)
-            
-            last_date_parsed = original_datetime_index[-1]
-            if selected_period == "Monthly":
-                future_date_obj = last_date_parsed + pd.DateOffset(months=1)
-            elif selected_period == "Quarterly":
-                future_date_obj = last_date_parsed + pd.DateOffset(months=3)
-            else:
-                future_date_obj = last_date_parsed + pd.Timedelta(weeks=1)
-                
-            X_future_step = np.array([[len(dataset_resampled), future_date_obj.month, future_date_obj.year]])
-            predicted_value = max(0, int(model_final.predict(X_future_step)[0]))
+            model_final.fit(X_features, y_target)
+            next_timestep = np.array([[len(dataset_resampled)]])
+            predicted_value = max(0, int(model_final.predict(next_timestep)[0]))
             
         # --- ALGORITMA 2: MOVING AVERAGE (Rata-rata Bergerak) ---
+        # Pola pikir: Memprediksi masa depan murni berdasarkan rata-rata penjualan dari beberapa periode terakhir.
         elif selected_method == "Moving Average":
-            rolling_window = min(3, len(y_train))
+            rolling_window = min(3, len(y_train)) # Mengambil jendela 3 periode ke belakang
             y_pred_list = []
-            # Memulai peramalan mandiri berantai (Recursive / Self-Feeding)
             training_history = list(y_train)
             
+            # Simulasi prediksi langkah demi langkah melintasi garis data uji (Testing Data)
             for idx in range(len(y_test)):
                 window_prediction = np.mean(training_history[-rolling_window:]) if len(training_history) >= rolling_window else 0
                 y_pred_list.append(window_prediction)
-                # KUNCI: Masukkan nilai PREDIKSI-nya sendiri ke dalam histori, bukan data aktual y_test!
-                training_history.append(window_prediction) 
+                training_history.append(y_test[idx]) # Memasukkan nilai aktual sebenarnya ke dalam histori untuk langkah berikutnya
             
             y_pred_test = np.array(y_pred_list).astype(int)
             predicted_value = int(np.mean(y_target[-rolling_window:])) if len(y_target) >= rolling_window else 0
 
         # --- ALGORITMA 3: XGBOOST (Extreme Gradient Boosting) ---
+        # Pola pikir: Algoritma tingkat lanjut berbasis pohon keputusan (Decision Trees) yang belajar secara bertahap dari kesalahan sebelumnya.
         elif selected_method == "XGBoost":
             if len(dataset_resampled) < 5:
+                # Fallback aman jika data terlalu sedikit
                 rolling_window = min(3, len(y_train))
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
-                predicted_value = int(np.mean(y_target[-rolling_window:])) if len(y_target) >= rolling_window else 0
+                predicted_value = int(np.mean(y_target[-rolling_window:])) if len(y_target) >= 2 else 0
             else:
+                # 1. Tahap Evaluasi yang Valid (Recursive Forecasting)
                 model_evaluator = XGBRegressor(n_estimators=50, max_depth=3, random_state=42, learning_rate=0.1)
                 model_evaluator.fit(X_train, y_train)
                 
-                # RECURSIVE FORECASTING: Menghitung baris demi baris data uji secara mandiri
+                # Kita prediksi data uji secara rekursif satu per satu
                 y_pred_test_list = []
-                current_lag = y_train[-1] # Ambil nilai lag awal dari titik terakhir data training
+                # Ambil nilai lag awal dari ujung data training
+                current_lag = y_train[-1] 
                 
                 for idx in range(len(y_test)):
-                    current_row_features = X_test[idx].copy()
-                    current_row_features[3] = current_lag # Paksa fitur Lag_1 diisi oleh hasil tebakan kita sebelumnya
+                    # Ambil baris fitur untuk data uji saat ini
+                    current_features = X_test[idx].copy()
+                    # Paksa fitur Lag_1 diisi oleh hasil prediksi kita sebelumnya (bukan nilai riil dataset)
+                    current_features[3] = current_lag 
                     
-                    pred_step = model_evaluator.predict(np.array([current_row_features]))[0]
+                    # Lakukan prediksi satu langkah
+                    pred_step = model_evaluator.predict(np.array([current_features]))[0]
                     pred_step = max(0, int(pred_step))
                     y_pred_test_list.append(pred_step)
-                    current_lag = pred_step # Estafet tebakan untuk iterasi berikutnya
+                    
+                    # Update nilai lag untuk iterasi berikutnya menggunakan hasil prediksi barusan
+                    current_lag = pred_step
                 
                 y_pred_test = np.array(y_pred_test_list)
                 
-                # Tahap Produksi penuh
+                # 2. Tahap Produksi (Gunakan Data Penuh)
                 model_final = XGBRegressor(n_estimators=50, max_depth=3, random_state=42, learning_rate=0.1)
                 model_final.fit(X_features, y_target)
                 
@@ -470,40 +466,40 @@ if selected_item != fallback_all_label:
                 else:
                     future_date_obj = last_date_parsed + pd.Timedelta(weeks=1)
                 
+                # Fitur lag untuk masa depan murni diambil dari titik terakhir data aktual penuh
                 X_future_step = np.array([[len(dataset_resampled), future_date_obj.month, future_date_obj.year, y_target[-1]]])
                 predicted_value = max(0, int(model_final.predict(X_future_step)[0]))
 
-        # --- ALGORITMA 4: EXPONENTIAL SMOOTHING (Holt-Winters) ---
+        # --- ALGORITMA 4: EXPONENTIAL SMOOTHING (Pemulusan Eksponensial / Holt-Winters) ---
+        # Pola pikir: Model statistik penanggalan waktu yang memberikan bobot lebih berat pada data terbaru dibandingkan data masa lampau.
         elif selected_method == "Exponential Smoothing":
             try:
-                # Hidupkan komponen musiman makro jika jumlah data mencukupi siklus tahunan
-                seasonal_periods = 12 if selected_period == "Monthly" else (4 if selected_period == "Quarterly" else 52)
+                # Gunakan strategi rolling yang sama agar grafik bergelombang dinamis
+                history = list(y_train)
+                es_preds = []
                 
-                if len(y_train) > seasonal_periods * 2:
-                    model_evaluator = ExponentialSmoothing(y_train, trend="add", seasonal="add", seasonal_periods=seasonal_periods, initialization_method="estimated").fit()
-                else:
-                    model_evaluator = ExponentialSmoothing(y_train, trend="add", initialization_method="estimated").fit()
-                
-                y_pred_test = model_evaluator.forecast(len(y_test))
-                y_pred_test = np.maximum(0, y_pred_test.astype(int))
-                
-                if len(y_target) > seasonal_periods * 2:
-                    model_final = ExponentialSmoothing(y_target, trend="add", seasonal="add", seasonal_periods=seasonal_periods, initialization_method="estimated").fit()
-                else:
-                    model_final = ExponentialSmoothing(y_target, trend="add", initialization_method="estimated").fit()
+                for idx in range(len(y_test)):
+                    model_temp = ExponentialSmoothing(history, initialization_method="estimated").fit()
+                    pred_one_step = model_temp.forecast(1)
+                    es_preds.append(pred_one_step[0])
+                    history.append(y_test[idx])
                     
+                y_pred_test = np.maximum(0, np.array(es_preds).astype(int))
+                
+                model_final = ExponentialSmoothing(y_target, initialization_method="estimated").fit()
                 predicted_value = max(0, int(model_final.forecast(1)[0]))
             except:
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
                 predicted_value = int(np.mean(y_target[-2:])) if len(y_target) >= 2 else 0
 
-        # --- ALGORITMA 5: PROPHET ---
+        # --- ALGORITMA 5: PROPHET (Dikembangkan oleh Meta/Facebook) ---
+        # Pola pikir: Model aditif canggih yang memecah deret waktu menjadi komponen Tren, Musiman (Seasonality), dan Efek Hari Libur.
         elif selected_method == "Prophet":
+            # Kebijakan Khusus: Prophet mewajibkan struktur kolom yang kaku, yaitu kolom waktu dinamai 'ds' dan target dinamai 'y'
             df_prophet = pd.DataFrame({'ds': original_datetime_index, 'y': y_target})
             df_train = df_prophet.iloc[:split_index]
             
             try:
-                # Nyalakan yearly_seasonality agar grafik pengujian 20% meliuk mengikuti tren musiman tahunan e-commerce
                 m_eval = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
                 m_eval.fit(df_train)
                 
@@ -521,9 +517,9 @@ if selected_item != fallback_all_label:
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
                 predicted_value = int(np.mean(y_target[-2:])) if len(y_target) >= 2 else 0
                 
-        # --- ALGORITMA 6: ARIMA ---
+        # --- ALGORITMA 6: ARIMA (Autoregressive Integrated Moving Average) ---
+        # Pola pikir: Model statistik klasik yang menggabungkan komponen Autoregressive (AR), Differencing (I), dan Moving Average (MA) untuk menangkap pola temporal.
         elif selected_method == "ARIMA":
-            # Gunakan struktur Series murni dengan frekuensi penanggalan Pandas yang eksplisit
             series_train = pd.Series(y_train, index=original_datetime_index[:split_index])
             series_target = pd.Series(y_target, index=original_datetime_index)
             
@@ -531,17 +527,34 @@ if selected_item != fallback_all_label:
             series_target.index.freq = freq_code
             
             try:
-                # Evaluasi out-of-sample forecast murni sepanjang ukuran data uji
-                model_evaluator = ARIMA(series_train, order=(1, 1, 1))
-                model_eval_fitted = model_evaluator.fit()
-                y_pred_test = model_eval_fitted.forecast(steps=len(y_test))
-                y_pred_test = np.maximum(0, y_pred_test.astype(int)).values
+                # REKAYASA ROLLING EVALUATION AGAR GRAFIK TESTING TIDAK LURUS FLAT
+                history = list(y_train)
+                arima_preds = []
                 
-                # Produksi proyeksi satu langkah ke depan
+                # Prediksi satu per satu melintasi data uji
+                for idx in range(len(y_test)):
+                    current_series = pd.Series(history, index=original_datetime_index[:split_index+idx])
+                    current_series.index.freq = freq_code
+                    
+                    # Latih model dengan histori yang terus bertambah
+                    model_temp = ARIMA(current_series, order=(1, 1, 1))
+                    model_temp_fitted = model_temp.fit()
+                    
+                    # Ramal 1 langkah ke depan
+                    pred_one_step = model_temp_fitted.forecast(steps=1)
+                    arima_preds.append(pred_one_step.iloc[0])
+                    
+                    # Masukkan data aktual uji ke histori untuk modal prediksi bulan berikutnya
+                    history.append(y_test[idx])
+                
+                y_pred_test = np.maximum(0, np.array(arima_preds).astype(int))
+                
+                # 2. Tahap Produksi (Tetap Ramal Masa Depan)
                 model_final = ARIMA(series_target, order=(1, 1, 1))
                 model_final_fitted = model_final.fit()
                 future_forecast = model_final_fitted.forecast(steps=1)
                 predicted_value = max(0, int(future_forecast.iloc[0]))
+                
             except:
                 y_pred_test = np.full(len(y_test), np.mean(y_train)).astype(int)
                 predicted_value = int(np.mean(y_target[-2:])) if len(y_target) >= 2 else 0
